@@ -1,6 +1,7 @@
 use serde_json;
 use serde_json::Map;
 use serde_json::Value;
+use std::collections::BTreeSet;
 
 fn main() {
     let data = r#"{
@@ -55,44 +56,47 @@ fn main() {
     }
 }
 
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
+struct KeyMap {
+    key: String,
+    children: Option<BTreeSet<KeyMap>>,
+}
+
 enum Mismatch {
     NoMismatch,
     ValueMismatch,
-    ObjectMismatch(Option<Vec<String>>, Option<Vec<String>>, Option<Vec<String>>),
+    ObjectMismatch(Option<BTreeSet<KeyMap>>, Option<BTreeSet<KeyMap>>, Option<BTreeSet<KeyMap>>),
 }
 
 fn match_json(value: &Value, value1: &Value) -> Mismatch {
     match (value, value1) {
         (Value::Object(a), Value::Object(b)) => {
-            let (mut left, mut right, intersection) = intersect_maps(&a, &b);
-            let mut unequal_keys = vec![];
+            let (left, right, intersection) = intersect_maps(&a, &b);
+            let mut unequal_keys = BTreeSet::new();
+
+            let mut left = left.iter().map(|x| KeyMap{ key: String::from(x), children: None }).collect::<BTreeSet<KeyMap>>();
+            let mut right = right.iter().map(|x| KeyMap{ key: String::from(x), children: None }).collect::<BTreeSet<KeyMap>>();
 
             for key in intersection {
-                let append_key = |x: &String| { 
-                    let mut n = String::from(&key);
-                    n.push('.');
-                    n.push_str(x);
-                    n.to_string()
-                };
                 let x = match_json(&a.get(&key).unwrap(), &b.get(&key).unwrap());
-                if let Some(mut keys) = match x {
+                if let Some(keys) = match x {
                     Mismatch::NoMismatch => None,
-                    Mismatch::ValueMismatch => Some(vec![key]),
+                    Mismatch::ValueMismatch => Some(KeyMap{ key, children: None }),
                     Mismatch::ObjectMismatch(left_keys, right_keys, mismatch_keys) => {
                         if let Some(left_keys) = left_keys {
-                            left.append(&mut left_keys.iter().map(append_key).collect::<Vec<String>>());
+                            left.insert(KeyMap{ key: String::from(&key), children: Some(left_keys) });
                         }
                         if let Some(right_keys) = right_keys {
-                            right.append(&mut right_keys.iter().map(append_key).collect::<Vec<String>>());
+                            right.insert(KeyMap{ key: String::from(&key), children: Some(right_keys) });
                         }
                         if let Some(mismatch_keys) = mismatch_keys {
-                            Some(mismatch_keys.iter().map(append_key).collect::<Vec<String>>())
+                            Some(KeyMap{ key: String::from(&key), children: Some(mismatch_keys) })
                         } else {
                             None
                         }
                     },
                 } {
-                    unequal_keys.append(&mut keys);
+                    unequal_keys.insert(keys);
                 }
             }
             Mismatch::ObjectMismatch(Some(left), Some(right), Some(unequal_keys))
@@ -108,21 +112,21 @@ fn match_json(value: &Value, value1: &Value) -> Mismatch {
 }
 
 fn intersect_maps<'a>(a: &Map<String, Value>, 
-    b: &Map<String, Value>) -> (Vec<String>, 
-    Vec<String>, Vec<String>) {
-    let mut intersection = vec![];
-    let mut left = vec![];
-    let mut right = vec![];
+    b: &Map<String, Value>) -> (BTreeSet<String>,
+    BTreeSet<String>, BTreeSet<String>) {
+    let mut intersection = BTreeSet::new();
+    let mut left = BTreeSet::new();
+    let mut right = BTreeSet::new();
     for a_key in a.keys() {
         if b.contains_key(a_key) {
-            intersection.push(String::from(a_key));
+            intersection.insert(String::from(a_key));
         } else {
-            left.push(String::from(a_key));
+            left.insert(String::from(a_key));
         }
     }
     for b_key in b.keys() {
         if !a.contains_key(b_key) {
-            right.push(String::from(b_key));
+            right.insert(String::from(b_key));
         }
     }
     (left, right, intersection)
