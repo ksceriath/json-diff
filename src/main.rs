@@ -85,7 +85,11 @@ fn match_json(value: &Value, value1: &Value) -> Mismatch {
                         if let Some(right_keys) = right_keys {
                             right.append(&mut right_keys.iter().map(append_key).collect::<Vec<String>>());
                         }
-                        mismatch_keys
+                        if let Some(mismatch_keys) = mismatch_keys {
+                            Some(mismatch_keys.iter().map(append_key).collect::<Vec<String>>())
+                        } else {
+                            None
+                        }
                     },
                 } {
                     unequal_keys.append(&mut keys);
