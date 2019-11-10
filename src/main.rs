@@ -2,40 +2,31 @@ use serde_json;
 use serde_json::Map;
 use serde_json::Value;
 use std::collections::BTreeSet;
+use std::env;
+use std::fs;
 
 fn main() {
-    let data = r#"{
-        "a":"b", 
-        "b":{
-            "c":{
-                "d":true,
-                "e":5,
-                "f":9,
-                "h":{
-                    "i":true,
-                    "j":false
-                }
-            }
-        }
-    }"#;
-    let data2 = r#"{
-        "a":"b",
-        "b":{
-            "c":{
-                "d":true,
-                "e":6,
-                "g":0,
-                "h":{
-                    "i":false,
-                    "k":false
-                }
-            }
-        }
-    }"#;
-    let value: Value = serde_json::from_str(data).unwrap();
-    let value2: Value = serde_json::from_str(data2).unwrap();
+    let args = env::args().collect::<Vec<String>>();
+    let file1 = &args[1];
+    let file2 = &args[2];
 
-    match match_json(&value, &value2) {
+    let data =
+        &fs::read_to_string(file1).expect(&format!("Error occurred while reading {}", file1));
+    let data2 =
+        &fs::read_to_string(file2).expect(&format!("Error occurred while reading {}", file2));
+
+    display_output(compare_jsons(data, data2));
+}
+
+fn compare_jsons(a: &str, b: &str) -> Mismatch {
+    let value: Value = serde_json::from_str(a).unwrap();
+    let value2: Value = serde_json::from_str(b).unwrap();
+
+    match_json(&value, &value2)
+}
+
+fn display_output(result: Mismatch) {
+    match result {
         Mismatch::NoMismatch => println!("No mismatch was found."),
         Mismatch::ValueMismatch => println!("Mismatch at root."),
         Mismatch::ObjectMismatch(None, None, None) => println!("No mismatch was found."),
@@ -68,7 +59,7 @@ struct KeyMap {
     children: Option<BTreeSet<KeyMap>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum Mismatch {
     NoMismatch,
     ValueMismatch,
@@ -182,4 +173,128 @@ fn intersect_maps(
         Some(intersection)
     };
     (left, right, intersection)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sugar::btreeset;
+
+    #[test]
+    fn nested_diff() {
+        let data1 = r#"{
+            "a":"b", 
+            "b":{
+                "c":{
+                    "d":true,
+                    "e":5,
+                    "f":9,
+                    "h":{
+                        "i":true,
+                        "j":false
+                    }
+                }
+            }
+        }"#;
+        let data2 = r#"{
+            "a":"b",
+            "b":{
+                "c":{
+                    "d":true,
+                    "e":6,
+                    "g":0,
+                    "h":{
+                        "i":false,
+                        "k":false
+                    }
+                }
+            }
+        }"#;
+        
+        let mismatch = compare_jsons(data1, data2);
+        match mismatch {
+            Mismatch::ObjectMismatch(Some(a), Some(b), Some(c)) => {
+                let expected_left = btreeset! {
+                    KeyMap {
+                        key: "b".to_string(),
+                        children: Some(btreeset! {
+                            KeyMap {
+                                key: "c".to_string(),
+                                children: Some(btreeset! {
+                                    KeyMap {
+                                        key: "f".to_string(),
+                                        children: None,
+                                    },
+                                    KeyMap {
+                                        key: "h".to_string(),
+                                        children: Some(btreeset! {
+                                            KeyMap {
+                                                key: "j".to_string(),
+                                                children: None,
+                                            }
+                                        })
+                                    }
+                                })
+                            }
+                        })
+                    }
+                };
+                let expected_right = btreeset! {
+                    KeyMap {
+                        key: "b".to_string(),
+                        children: Some(btreeset! {
+                            KeyMap {
+                                key: "c".to_string(),
+                                children: Some(btreeset! {
+                                    KeyMap {
+                                        key: "g".to_string(),
+                                        children: None,
+                                    },
+                                    KeyMap {
+                                        key: "h".to_string(),
+                                        children: Some(btreeset! {
+                                            KeyMap {
+                                                key: "k".to_string(),
+                                                children: None,
+                                            }
+                                        })
+                                    }
+                                })
+                            }
+                        })
+                    }
+                };
+                let expected_uneq = btreeset! {
+                    KeyMap {
+                        key: "b".to_string(),
+                        children: Some(btreeset! {
+                            KeyMap {
+                                key: "c".to_string(),
+                                children: Some(btreeset! {
+                                    KeyMap {
+                                        key: "e".to_string(),
+                                        children: None,
+                                    },
+                                    KeyMap {
+                                        key: "h".to_string(),
+                                        children: Some(btreeset! {
+                                            KeyMap {
+                                                key: "i".to_string(),
+                                                children: None,
+                                            }
+                                        })
+                                    }
+                                })
+                            }
+                        })
+                    }
+                };
+
+                assert_eq!(a, expected_left, "Left was incorrect.");
+                assert_eq!(b, expected_right, "Right was incorrect.");
+                assert_eq!(c, expected_uneq, "unequals were incorrect.");
+            }
+            _ => assert!(false, "Mismatch was not of type ObjectMismatch"),
+        }
+    }
 }
