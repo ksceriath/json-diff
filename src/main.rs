@@ -1,7 +1,8 @@
 use serde_json;
 use serde_json::Map;
 use serde_json::Value;
-use std::collections::BTreeSet;
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 
@@ -53,21 +54,16 @@ fn display_output(result: Mismatch) {
     };
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Debug, PartialEq)]
 struct KeyMap {
-    key: String,
-    children: Option<BTreeSet<KeyMap>>,
+    keys: HashMap<String, Option<KeyMap>>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 enum Mismatch {
     NoMismatch,
     ValueMismatch,
-    ObjectMismatch(
-        Option<BTreeSet<KeyMap>>,
-        Option<BTreeSet<KeyMap>>,
-        Option<BTreeSet<KeyMap>>,
-    ),
+    ObjectMismatch(Option<KeyMap>, Option<KeyMap>, Option<KeyMap>),
 }
 
 fn match_json(value: &Value, value1: &Value) -> Mismatch {
@@ -76,57 +72,58 @@ fn match_json(value: &Value, value1: &Value) -> Mismatch {
             let (left, right, intersection) = intersect_maps(&a, &b);
             let mut unequal_keys = None;
 
-            let mut left = left.map(|l| {
-                l.iter()
-                    .map(|x| KeyMap {
-                        key: String::from(x),
-                        children: None,
-                    })
-                    .collect::<BTreeSet<KeyMap>>()
+            let mut left = left.map(|l| KeyMap {
+                keys: l
+                    .iter()
+                    .map(|x| (String::from(x), None))
+                    .collect::<HashMap<String, Option<KeyMap>>>(),
             });
-            let mut right = right.map(|r| {
-                r.iter()
-                    .map(|x| KeyMap {
-                        key: String::from(x),
-                        children: None,
-                    })
-                    .collect::<BTreeSet<KeyMap>>()
+
+            let mut right = right.map(|r| KeyMap {
+                keys: r
+                    .iter()
+                    .map(|x| (String::from(x), None))
+                    .collect::<HashMap<String, Option<KeyMap>>>(),
             });
 
             if let Some(intersection) = intersection {
                 for key in intersection {
-                    if let Some(keys) =
+                    if let Some((key, value)) =
                         match match_json(&a.get(&key).unwrap(), &b.get(&key).unwrap()) {
                             Mismatch::NoMismatch => None,
-                            Mismatch::ValueMismatch => Some(KeyMap {
-                                key,
-                                children: None,
-                            }),
+
+                            Mismatch::ValueMismatch => Some((key, None)),
+
                             Mismatch::ObjectMismatch(left_keys, right_keys, mismatch_keys) => {
                                 if let Some(left_keys) = left_keys {
-                                    left.get_or_insert(BTreeSet::new()).insert(KeyMap {
-                                        key: String::from(&key),
-                                        children: Some(left_keys),
-                                    });
+                                    left.get_or_insert(KeyMap {
+                                        keys: HashMap::new(),
+                                    })
+                                    .keys
+                                    .insert(String::from(&key), Some(left_keys));
                                 }
                                 if let Some(right_keys) = right_keys {
-                                    right.get_or_insert(BTreeSet::new()).insert(KeyMap {
-                                        key: String::from(&key),
-                                        children: Some(right_keys),
-                                    });
+                                    right
+                                        .get_or_insert(KeyMap {
+                                            keys: HashMap::new(),
+                                        })
+                                        .keys
+                                        .insert(String::from(&key), Some(right_keys));
                                 }
                                 if let Some(mismatch_keys) = mismatch_keys {
-                                    Some(KeyMap {
-                                        key: String::from(&key),
-                                        children: Some(mismatch_keys),
-                                    })
+                                    Some((String::from(&key), Some(mismatch_keys)))
                                 } else {
                                     None
                                 }
                             }
                         }
                     {
-                        unequal_keys.get_or_insert(BTreeSet::new()).insert(keys);
+                        unequal_keys
+                            .get_or_insert(KeyMap {
+                                keys: HashMap::new(),
+                            })
+                            .keys
+                            .insert(key, value);
                     }
                 }
             }
@@ -146,13 +143,13 @@ fn intersect_maps(
     a: &Map<String, Value>,
     b: &Map<String, Value>,
 ) -> (
-    Option<BTreeSet<String>>,
-    Option<BTreeSet<String>>,
-    Option<BTreeSet<String>>,
+    Option<HashSet<String>>,
+    Option<HashSet<String>>,
+    Option<HashSet<String>>,
 ) {
-    let mut intersection = BTreeSet::new();
-    let mut left = BTreeSet::new();
-    let mut right = BTreeSet::new();
+    let mut intersection = HashSet::new();
+    let mut left = HashSet::new();
+    let mut right = HashSet::new();
     for a_key in a.keys() {
         if b.contains_key(a_key) {
             intersection.insert(String::from(a_key));
@@ -178,7 +175,7 @@ fn intersect_maps(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sugar::btreeset;
+    use maplit::hashmap;
 
     #[test]
     fn nested_diff() {
@@ -210,84 +207,65 @@ mod tests {
                 }
             }
         }"#;
-        
+
         let mismatch = compare_jsons(data1, data2);
         match mismatch {
             Mismatch::ObjectMismatch(Some(a), Some(b), Some(c)) => {
-                let expected_left = btreeset! {
-                    KeyMap {
-                        key: "b".to_string(),
-                        children: Some(btreeset! {
-                            KeyMap {
-                                key: "c".to_string(),
-                                children: Some(btreeset! {
-                                    KeyMap {
-                                        key: "f".to_string(),
-                                        children: None,
-                                    },
-                                    KeyMap {
-                                        key: "h".to_string(),
-                                        children: Some(btreeset! {
-                                            KeyMap {
-                                                key: "j".to_string(),
-                                                children: None,
+                let expected_left = KeyMap {
+                    keys: hashmap! {
+                        "b".to_string() => Some(KeyMap {
+                            keys: hashmap! {
+                                "c".to_string() => Some(KeyMap {
+                                    keys: hashmap! {
+                                        "f".to_string() => None,
+                                        "h".to_string() => Some(KeyMap {
+                                            keys: hashmap! {
+                                                "j".to_string() => None,
                                             }
                                         })
                                     }
                                 })
                             }
                         })
-                    }
+                    },
                 };
-                let expected_right = btreeset! {
-                    KeyMap {
-                        key: "b".to_string(),
-                        children: Some(btreeset! {
-                            KeyMap {
-                                key: "c".to_string(),
-                                children: Some(btreeset! {
-                                    KeyMap {
-                                        key: "g".to_string(),
-                                        children: None,
-                                    },
-                                    KeyMap {
-                                        key: "h".to_string(),
-                                        children: Some(btreeset! {
-                                            KeyMap {
-                                                key: "k".to_string(),
-                                                children: None,
+
+                let expected_right = KeyMap {
+                    keys: hashmap! {
+                        "b".to_string() => Some(KeyMap {
+                            keys: hashmap! {
+                                "c".to_string() => Some(KeyMap {
+                                    keys: hashmap! {
+                                        "g".to_string() => None,
+                                        "h".to_string() => Some(KeyMap {
+                                            keys: hashmap! {
+                                                "k".to_string() => None,
                                             }
                                         })
                                     }
                                 })
                             }
                         })
-                    }
+                    },
                 };
-                let expected_uneq = btreeset! {
-                    KeyMap {
-                        key: "b".to_string(),
-                        children: Some(btreeset! {
-                            KeyMap {
-                                key: "c".to_string(),
-                                children: Some(btreeset! {
-                                    KeyMap {
-                                        key: "e".to_string(),
-                                        children: None,
-                                    },
-                                    KeyMap {
-                                        key: "h".to_string(),
-                                        children: Some(btreeset! {
-                                            KeyMap {
-                                                key: "i".to_string(),
-                                                children: None,
+
+                let expected_uneq = KeyMap {
+                    keys: hashmap! {
+                        "b".to_string() => Some(KeyMap {
+                            keys: hashmap! {
+                                "c".to_string() => Some(KeyMap {
+                                    keys: hashmap! {
+                                        "e".to_string() => None,
+                                        "h".to_string() => Some(KeyMap {
+                                            keys: hashmap! {
+                                                "i".to_string() => None,
                                             }
                                         })
                                     }
                                 })
                             }
                         })
-                    }
+                    },
                 };
 
                 assert_eq!(a, expected_left, "Left was incorrect.");
