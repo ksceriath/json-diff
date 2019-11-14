@@ -11,27 +11,20 @@ fn main() {
     let file1 = &args[1];
     let file2 = &args[2];
 
-    let data =
+    let data1 =
         &fs::read_to_string(file1).expect(&format!("Error occurred while reading {}", file1));
     let data2 =
         &fs::read_to_string(file2).expect(&format!("Error occurred while reading {}", file2));
 
-    display_output(compare_jsons(data, data2));
-}
-
-fn compare_jsons(a: &str, b: &str) -> Mismatch {
-    let value: Value = serde_json::from_str(a).unwrap();
-    let value2: Value = serde_json::from_str(b).unwrap();
-
-    match_json(&value, &value2)
+    display_output(compare_jsons(data1, data2));
 }
 
 fn display_output(result: Mismatch) {
     match result {
-        Mismatch::NoMismatch => println!("No mismatch was found."),
-        Mismatch::ValueMismatch => println!("Mismatch at root."),
-        Mismatch::ObjectMismatch(None, None, None) => println!("No mismatch was found."),
-        Mismatch::ObjectMismatch(a, b, c) => {
+        Mismatch::None => println!("No mismatch was found."),
+        Mismatch::Values => println!("Mismatch at root."),
+        Mismatch::Objects(None, None, None) => println!("No mismatch was found."),
+        Mismatch::Objects(a, b, c) => {
             if let Some(left_keys) = a {
                 println!(
                     "Following keys were not found in second object: {:?}",
@@ -59,83 +52,78 @@ struct KeyMap {
     keys: HashMap<String, Option<KeyMap>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum Mismatch {
-    NoMismatch,
-    ValueMismatch,
-    ObjectMismatch(Option<KeyMap>, Option<KeyMap>, Option<KeyMap>),
+    None,
+    Values,
+    Objects(Option<KeyMap>, Option<KeyMap>, Option<KeyMap>),
 }
 
-fn match_json(value: &Value, value1: &Value) -> Mismatch {
-    match (value, value1) {
+fn compare_jsons(a: &str, b: &str) -> Mismatch {
+    let value: Value = serde_json::from_str(a).unwrap();
+    let value2: Value = serde_json::from_str(b).unwrap();
+
+    match_json(&value, &value2)
+}
+
+fn match_json(value1: &Value, value2: &Value) -> Mismatch {
+    match (value1, value2) {
         (Value::Object(a), Value::Object(b)) => {
-            let (left, right, intersection) = intersect_maps(&a, &b);
+            let (left_only_keys, right_only_keys, intersection_keys) = intersect_maps(&a, &b);
+
             let mut unequal_keys = None;
+            let mut left_only_keys = get_map_of_keys(left_only_keys);
+            let mut right_only_keys = get_map_of_keys(right_only_keys);
 
-            let mut left = left.map(|l| KeyMap {
-                keys: l
-                    .iter()
-                    .map(|x| (String::from(x), None))
-                    .collect::<HashMap<String, Option<KeyMap>>>(),
-            });
-
-            let mut right = right.map(|r| KeyMap {
-                keys: r
-                    .iter()
-                    .map(|x| (String::from(x), None))
-                    .collect::<HashMap<String, Option<KeyMap>>>(),
-            });
-
-            if let Some(intersection) = intersection {
-                for key in intersection {
-                    if let Some((key, value)) =
-                        match match_json(&a.get(&key).unwrap(), &b.get(&key).unwrap()) {
-                            Mismatch::NoMismatch => None,
-
-                            Mismatch::ValueMismatch => Some((key, None)),
-
-                            Mismatch::ObjectMismatch(left_keys, right_keys, mismatch_keys) => {
-                                if let Some(left_keys) = left_keys {
-                                    left.get_or_insert(KeyMap {
-                                        keys: HashMap::new(),
-                                    })
-                                    .keys
-                                    .insert(String::from(&key), Some(left_keys));
-                                }
-                                if let Some(right_keys) = right_keys {
-                                    right
-                                        .get_or_insert(KeyMap {
-                                            keys: HashMap::new(),
-                                        })
-                                        .keys
-                                        .insert(String::from(&key), Some(right_keys));
-                                }
-                                if let Some(mismatch_keys) = mismatch_keys {
-                                    Some((String::from(&key), Some(mismatch_keys)))
-                                } else {
-                                    None
-                                }
-                            }
-                        }
-                    {
-                        unequal_keys
-                            .get_or_insert(KeyMap {
+            if let Some(intersection_keys) = intersection_keys {
+                for key in intersection_keys {
+                    match match_json(&a.get(&key).unwrap(), &b.get(&key).unwrap()) {
+                        Mismatch::Values => {
+                            unequal_keys.get_or_insert(KeyMap {
                                 keys: HashMap::new(),
                             })
                             .keys
-                            .insert(key, value);
+                            .insert(String::from(&key), None);
+                        },
+
+                        Mismatch::Objects(left_keys, right_keys, mismatch_keys) => {
+                            insert_child_key_map(&mut left_only_keys, left_keys, &key);
+                            insert_child_key_map(&mut right_only_keys, right_keys, &key);
+                            insert_child_key_map(&mut unequal_keys, mismatch_keys, &key);
+                        },
+
+                        Mismatch::None => (),
                     }
                 }
             }
-            Mismatch::ObjectMismatch(left, right, unequal_keys)
+            Mismatch::Objects(left_only_keys, right_only_keys, unequal_keys)
         }
         (a, b) => {
             if a == b {
-                Mismatch::NoMismatch
+                Mismatch::None
             } else {
-                Mismatch::ValueMismatch
+                Mismatch::Values
             }
         }
+    }
+}
+
+fn get_map_of_keys(set: Option<HashSet<String>>) -> Option<KeyMap> {
+    set.map(|s| KeyMap {
+        keys: s
+            .iter()
+            .map(|key| (String::from(key), None))
+            .collect(),
+    })
+}
+
+fn insert_child_key_map(parent: &mut Option<KeyMap>, child: Option<KeyMap>, key: &String) {
+    if child.is_some() {
+        parent.get_or_insert(KeyMap {
+            keys: HashMap::new(),
+        })
+        .keys
+        .insert(String::from(key), child); // TODO check: do we ever insert 'None' here?
     }
 }
 
@@ -210,7 +198,7 @@ mod tests {
 
         let mismatch = compare_jsons(data1, data2);
         match mismatch {
-            Mismatch::ObjectMismatch(Some(a), Some(b), Some(c)) => {
+            Mismatch::Objects(Some(a), Some(b), Some(c)) => {
                 let expected_left = KeyMap {
                     keys: hashmap! {
                         "b".to_string() => Some(KeyMap {
@@ -272,7 +260,41 @@ mod tests {
                 assert_eq!(b, expected_right, "Right was incorrect.");
                 assert_eq!(c, expected_uneq, "unequals were incorrect.");
             }
-            _ => assert!(false, "Mismatch was not of type ObjectMismatch"),
+            _ => assert!(false, "Mismatch was not of type Objects"),
         }
+    }
+
+    #[test]
+    fn no_diff() {
+        let data1 = r#"{
+            "a":"b", 
+            "b":{
+                "c":{
+                    "d":true,
+                    "e":5,
+                    "f":9,
+                    "h":{
+                        "i":true,
+                        "j":false
+                    }
+                }
+            }
+        }"#;
+        let data2 = r#"{
+            "a":"b", 
+            "b":{
+                "c":{
+                    "d":true,
+                    "e":5,
+                    "f":9,
+                    "h":{
+                        "i":true,
+                        "j":false
+                    }
+                }
+            }
+        }"#;
+
+        assert_eq!(compare_jsons(data1, data2), Mismatch::Objects(None, None, None));
     }
 }
