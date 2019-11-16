@@ -20,50 +20,69 @@ fn main() {
 }
 
 fn display_output(result: Mismatch) {
-    match result {
-        Mismatch::None => println!("No mismatch was found."),
-        Mismatch::Values => println!("Mismatch at root."),
-        Mismatch::Objects(None, None, None) => println!("No mismatch was found."),
-        Mismatch::Objects(a, b, c) => {
-            if let Some(left_keys) = a {
-                println!(
-                    "Following keys were not found in second object: {:?}",
-                    left_keys
-                );
-            }
-            if let Some(right_keys) = b {
-                println!(
-                    "Following keys were not found in first object: {:?}",
-                    right_keys
-                );
-            }
-            if let Some(unequal_keys) = c {
-                println!(
-                    "Following keys were not found to be equal: {:?}",
-                    unequal_keys
-                );
-            }
-        }
+    let no_mismatch = Mismatch {
+        left_only_keys: KeyNode::Nil,
+        right_only_keys: KeyNode::Nil,
+        keys_in_both: KeyNode::Nil,
     };
+    if no_mismatch == result {
+        println!("No mismatch was found.");
+    } else {
+        match result.left_only_keys {
+            KeyNode::Node(_) => println!(
+                "Following keys are not found in second object: {:?}",
+                result.left_only_keys
+            ),
+            KeyNode::Value(_, _) => (), // TODO left_only_keys should never be Value type => Throw an error
+            KeyNode::Nil => (),
+        }
+        match result.right_only_keys {
+            KeyNode::Node(_) => println!(
+                "Following keys are not found in first object: {:?}",
+                result.right_only_keys
+            ),
+            KeyNode::Value(_, _) => (), // TODO right_only_keys should never be Value type => Throw an error
+            KeyNode::Nil => (),
+        }
+        match result.keys_in_both {
+            KeyNode::Node(_) => {
+                println!("Following values are not equal: {:?}", result.keys_in_both)
+            }
+            KeyNode::Value(_, _) => println!("Mismatch at root."),
+            KeyNode::Nil => (),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)] // TODO check: do we need PartiaEq ?
+enum KeyNode {
+    Nil,
+    Value(Value, Value),
+    Node(HashMap<String, KeyNode>),
 }
 
 #[derive(Debug, PartialEq)]
-struct KeyMap {
-    keys: HashMap<String, Option<KeyMap>>,
+struct Mismatch {
+    left_only_keys: KeyNode,
+    right_only_keys: KeyNode,
+    keys_in_both: KeyNode,
 }
 
-#[derive(Debug, PartialEq)]
-enum Mismatch {
-    None,
-    Values,
-    Objects(Option<KeyMap>, Option<KeyMap>, Option<KeyMap>),
+impl Mismatch {
+    fn new(l: KeyNode, r: KeyNode, u: KeyNode) -> Mismatch {
+        Mismatch {
+            left_only_keys: l,
+            right_only_keys: r,
+            keys_in_both: u,
+        }
+    }
 }
 
 fn compare_jsons(a: &str, b: &str) -> Mismatch {
-    let value: Value = serde_json::from_str(a).unwrap();
+    let value1: Value = serde_json::from_str(a).unwrap();
     let value2: Value = serde_json::from_str(b).unwrap();
 
-    match_json(&value, &value2)
+    match_json(&value1, &value2)
 }
 
 fn match_json(value1: &Value, value2: &Value) -> Mismatch {
@@ -71,59 +90,63 @@ fn match_json(value1: &Value, value2: &Value) -> Mismatch {
         (Value::Object(a), Value::Object(b)) => {
             let (left_only_keys, right_only_keys, intersection_keys) = intersect_maps(&a, &b);
 
-            let mut unequal_keys = None;
+            let mut unequal_keys = KeyNode::Nil;
             let mut left_only_keys = get_map_of_keys(left_only_keys);
             let mut right_only_keys = get_map_of_keys(right_only_keys);
 
             if let Some(intersection_keys) = intersection_keys {
                 for key in intersection_keys {
-                    match match_json(&a.get(&key).unwrap(), &b.get(&key).unwrap()) {
-                        Mismatch::Values => {
-                            unequal_keys.get_or_insert(KeyMap {
-                                keys: HashMap::new(),
-                            })
-                            .keys
-                            .insert(String::from(&key), None);
-                        },
-
-                        Mismatch::Objects(left_keys, right_keys, mismatch_keys) => {
-                            insert_child_key_map(&mut left_only_keys, left_keys, &key);
-                            insert_child_key_map(&mut right_only_keys, right_keys, &key);
-                            insert_child_key_map(&mut unequal_keys, mismatch_keys, &key);
-                        },
-
-                        Mismatch::None => (),
-                    }
+                    let Mismatch {
+                        left_only_keys: l,
+                        right_only_keys: r,
+                        keys_in_both: u,
+                    } = match_json(&a.get(&key).unwrap(), &b.get(&key).unwrap());
+                    left_only_keys = insert_child_key_map(left_only_keys, l, &key);
+                    right_only_keys = insert_child_key_map(right_only_keys, r, &key);
+                    unequal_keys = insert_child_key_map(unequal_keys, u, &key);
                 }
             }
-            Mismatch::Objects(left_only_keys, right_only_keys, unequal_keys)
+            Mismatch::new(left_only_keys, right_only_keys, unequal_keys)
         }
         (a, b) => {
             if a == b {
-                Mismatch::None
+                Mismatch::new(KeyNode::Nil, KeyNode::Nil, KeyNode::Nil)
             } else {
-                Mismatch::Values
+                Mismatch::new(
+                    KeyNode::Nil,
+                    KeyNode::Nil,
+                    KeyNode::Value(a.clone(), b.clone()),
+                )
             }
         }
     }
 }
 
-fn get_map_of_keys(set: Option<HashSet<String>>) -> Option<KeyMap> {
-    set.map(|s| KeyMap {
-        keys: s
-            .iter()
-            .map(|key| (String::from(key), None))
-            .collect(),
-    })
+fn get_map_of_keys(set: Option<HashSet<String>>) -> KeyNode {
+    if let Some(set) = set {
+        KeyNode::Node(
+            set.iter()
+                .map(|key| (String::from(key), KeyNode::Nil))
+                .collect(),
+        )
+    } else {
+        KeyNode::Nil
+    }
 }
 
-fn insert_child_key_map(parent: &mut Option<KeyMap>, child: Option<KeyMap>, key: &String) {
-    if child.is_some() {
-        parent.get_or_insert(KeyMap {
-            keys: HashMap::new(),
-        })
-        .keys
-        .insert(String::from(key), child); // TODO check: do we ever insert 'None' here?
+fn insert_child_key_map(parent: KeyNode, child: KeyNode, key: &String) -> KeyNode {
+    if child == KeyNode::Nil {
+        return parent;
+    }
+    if let KeyNode::Node(mut map) = parent {
+        map.insert(String::from(key), child);
+        KeyNode::Node(map) // This is weird! I just wanted to return back `parent` here
+    } else if let KeyNode::Nil = parent {
+        let mut map = HashMap::new();
+        map.insert(String::from(key), child);
+        KeyNode::Node(map)
+    } else {
+        parent // TODO Trying to insert child node in a Value variant : Should not happen => Throw an error instead.
     }
 }
 
@@ -164,6 +187,7 @@ fn intersect_maps(
 mod tests {
     use super::*;
     use maplit::hashmap;
+    use serde_json::json;
 
     #[test]
     fn nested_diff() {
@@ -197,71 +221,46 @@ mod tests {
         }"#;
 
         let mismatch = compare_jsons(data1, data2);
-        match mismatch {
-            Mismatch::Objects(Some(a), Some(b), Some(c)) => {
-                let expected_left = KeyMap {
-                    keys: hashmap! {
-                        "b".to_string() => Some(KeyMap {
-                            keys: hashmap! {
-                                "c".to_string() => Some(KeyMap {
-                                    keys: hashmap! {
-                                        "f".to_string() => None,
-                                        "h".to_string() => Some(KeyMap {
-                                            keys: hashmap! {
-                                                "j".to_string() => None,
-                                            }
-                                        })
-                                    }
-                                })
+        let expected_left = KeyNode::Node(hashmap! {
+        "b".to_string() => KeyNode::Node(hashmap! {
+                "c".to_string() => KeyNode::Node(hashmap! {
+                        "f".to_string() => KeyNode::Nil,
+                        "h".to_string() => KeyNode::Node( hashmap! {
+                                "j".to_string() => KeyNode::Nil,
                             }
-                        })
-                    },
-                };
-
-                let expected_right = KeyMap {
-                    keys: hashmap! {
-                        "b".to_string() => Some(KeyMap {
-                            keys: hashmap! {
-                                "c".to_string() => Some(KeyMap {
-                                    keys: hashmap! {
-                                        "g".to_string() => None,
-                                        "h".to_string() => Some(KeyMap {
-                                            keys: hashmap! {
-                                                "k".to_string() => None,
-                                            }
-                                        })
-                                    }
-                                })
-                            }
-                        })
-                    },
-                };
-
-                let expected_uneq = KeyMap {
-                    keys: hashmap! {
-                        "b".to_string() => Some(KeyMap {
-                            keys: hashmap! {
-                                "c".to_string() => Some(KeyMap {
-                                    keys: hashmap! {
-                                        "e".to_string() => None,
-                                        "h".to_string() => Some(KeyMap {
-                                            keys: hashmap! {
-                                                "i".to_string() => None,
-                                            }
-                                        })
-                                    }
-                                })
-                            }
-                        })
-                    },
-                };
-
-                assert_eq!(a, expected_left, "Left was incorrect.");
-                assert_eq!(b, expected_right, "Right was incorrect.");
-                assert_eq!(c, expected_uneq, "unequals were incorrect.");
-            }
-            _ => assert!(false, "Mismatch was not of type Objects"),
-        }
+                        ),
+                }
+                ),
+            }),
+        });
+        let expected_right = KeyNode::Node(hashmap! {
+            "b".to_string() => KeyNode::Node(hashmap! {
+                    "c".to_string() => KeyNode::Node(hashmap! {
+                            "g".to_string() => KeyNode::Nil,
+                            "h".to_string() => KeyNode::Node(hashmap! {
+                                    "k".to_string() => KeyNode::Nil,
+                                }
+                            )
+                        }
+                    )
+                }
+            )
+        });
+        let expected_uneq = KeyNode::Node(hashmap! {
+            "b".to_string() => KeyNode::Node(hashmap! {
+                    "c".to_string() => KeyNode::Node(hashmap! {
+                            "e".to_string() => KeyNode::Value(json!(5), json!(6)),
+                            "h".to_string() => KeyNode::Node(hashmap! {
+                                    "i".to_string() => KeyNode::Value(json!(true), json!(false)),
+                                }
+                            )
+                        }
+                    )
+                }
+            )
+        });
+        let expected = Mismatch::new(expected_left, expected_right, expected_uneq);
+        assert_eq!(mismatch, expected, "Diff was incorrect.");
     }
 
     #[test]
@@ -295,6 +294,20 @@ mod tests {
             }
         }"#;
 
-        assert_eq!(compare_jsons(data1, data2), Mismatch::Objects(None, None, None));
+        assert_eq!(
+            compare_jsons(data1, data2),
+            Mismatch::new(KeyNode::Nil, KeyNode::Nil, KeyNode::Nil)
+        );
+    }
+
+    #[test]
+    fn no_json() {
+        let data1 = r#"{}"#;
+        let data2 = r#"{}"#;
+
+        assert_eq!(
+            compare_jsons(data1, data2),
+            Mismatch::new(KeyNode::Nil, KeyNode::Nil, KeyNode::Nil)
+        );
     }
 }
