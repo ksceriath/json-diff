@@ -4,6 +4,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
+use std::fmt;
 use std::fs;
 
 fn main() {
@@ -28,27 +29,40 @@ fn display_output(result: Mismatch) {
     if no_mismatch == result {
         println!("No mismatch was found.");
     } else {
+        match result.keys_in_both {
+            KeyNode::Node(_) => {
+                let mut keys = Vec::new();
+                result.keys_in_both.absolute_keys(&mut keys, None);
+                println!("Mismatched:");
+                for key in keys {
+                    println!("{}", key);
+                }
+            }
+            KeyNode::Value(_, _) => println!("Mismatch at root."),
+            KeyNode::Nil => (),
+        }
         match result.left_only_keys {
-            KeyNode::Node(_) => println!(
-                "Following keys are not found in second object: {:?}",
-                result.left_only_keys
-            ),
+            KeyNode::Node(_) => {
+                let mut keys = Vec::new();
+                result.left_only_keys.absolute_keys(&mut keys, None);
+                println!("Extra on left:");
+                for key in keys {
+                    println!("{}", key);
+                }
+            }
             KeyNode::Value(_, _) => (), // TODO left_only_keys should never be Value type => Throw an error
             KeyNode::Nil => (),
         }
         match result.right_only_keys {
-            KeyNode::Node(_) => println!(
-                "Following keys are not found in first object: {:?}",
-                result.right_only_keys
-            ),
-            KeyNode::Value(_, _) => (), // TODO right_only_keys should never be Value type => Throw an error
-            KeyNode::Nil => (),
-        }
-        match result.keys_in_both {
             KeyNode::Node(_) => {
-                println!("Following values are not equal: {:?}", result.keys_in_both)
+                let mut keys = Vec::new();
+                result.right_only_keys.absolute_keys(&mut keys, None);
+                println!("Extra on right:");
+                for key in keys {
+                    println!("{}", key);
+                }
             }
-            KeyNode::Value(_, _) => println!("Mismatch at root."),
+            KeyNode::Value(_, _) => (), // TODO right_only_keys should never be Value type => Throw an error
             KeyNode::Nil => (),
         }
     }
@@ -59,6 +73,33 @@ enum KeyNode {
     Nil,
     Value(Value, Value),
     Node(HashMap<String, KeyNode>),
+}
+
+impl KeyNode {
+    fn absolute_keys(&self, keys: &mut Vec<String>, key_from_root: Option<String>) {
+        let val_key = |key: Option<String>| {
+            key.map(|mut s| {
+                s.push_str(" ->");
+                s
+            })
+            .unwrap_or(String::new())
+        };
+        let nil_key = |key: Option<String>| key.unwrap_or(String::new());
+        match self {
+            KeyNode::Nil => keys.push(nil_key(key_from_root)),
+            KeyNode::Value(a, b) => {
+                keys.push(format!("{} [ {} :: {} ]", val_key(key_from_root), a, b))
+            }
+            KeyNode::Node(map) => {
+                for (key, value) in map {
+                    value.absolute_keys(
+                        keys,
+                        Some(format!("{} {}", val_key(key_from_root.clone()), key)),
+                    )
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
