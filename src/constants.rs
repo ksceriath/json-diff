@@ -1,4 +1,5 @@
 use std::fmt;
+use colored::*;
 
 #[derive(Debug)]
 pub enum Message {
@@ -31,6 +32,6 @@ impl fmt::Display for Message {
             Message::Mismatch => "Mismatched",
         };
 
-        write!(f, "{}", message)
+        write!(f, "{}", message.bold())
     }
 }

@@ -93,13 +93,13 @@ fn display_output(result: Mismatch) {
     let stdout = io::stdout();
     let mut handle = io::BufWriter::new(stdout.lock());
     if no_mismatch == result {
-        writeln!(handle, "{}", Message::NoMismatch).unwrap();
+        writeln!(handle, "\n{}", Message::NoMismatch).unwrap();
     } else {
         match result.keys_in_both {
             KeyNode::Node(_) => {
                 let mut keys = Vec::new();
                 result.keys_in_both.absolute_keys(&mut keys, None);
-                writeln!(handle, "{}:", Message::Mismatch).unwrap();
+                writeln!(handle, "\n{}:", Message::Mismatch).unwrap();
                 for key in keys {
                     writeln!(handle, "{}", key).unwrap();
                 }
@@ -111,7 +111,7 @@ fn display_output(result: Mismatch) {
             KeyNode::Node(_) => {
                 let mut keys = Vec::new();
                 result.left_only_keys.absolute_keys(&mut keys, None);
-                writeln!(handle, "{}:", Message::LeftExtra).unwrap();
+                writeln!(handle, "\n{}:", Message::LeftExtra).unwrap();
                 for key in keys {
                     writeln!(handle, "{}", key.red().bold()).unwrap();
                 }
@@ -123,7 +123,7 @@ fn display_output(result: Mismatch) {
             KeyNode::Node(_) => {
                 let mut keys = Vec::new();
                 result.right_only_keys.absolute_keys(&mut keys, None);
-                writeln!(handle, "{}:", Message::RightExtra).unwrap();
+                writeln!(handle, "\n{}:", Message::RightExtra).unwrap();
                 for key in keys {
                     writeln!(handle, "{}", key.green().bold()).unwrap();
                 }
