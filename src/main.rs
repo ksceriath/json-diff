@@ -6,12 +6,25 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
 use std::fs;
+use std::process;
 use std::str::FromStr;
 use structopt::StructOpt;
+use constants::Message;
+
+mod constants;
+
+const HELP: &str = r#"
+Example:
+json_diff f source1.json source2.json
+json_diff d '{...}' '{...}'
+
+Option:
+f   :   read input from json files
+d   :   read input from command line"#;
 
 #[derive(Debug)]
 struct AppError {
-    message: String,
+    message: Message,
 }
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -19,44 +32,54 @@ impl fmt::Display for AppError {
     }
 }
 
-enum CliOptions {
+enum InputReadMode {
     D,
     F,
 }
-impl FromStr for CliOptions {
+impl FromStr for InputReadMode {
     type Err = AppError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "d" => Ok(CliOptions::D),
-            "f" => Ok(CliOptions::F),
+            "d" => Ok(InputReadMode::D),
+            "f" => Ok(InputReadMode::F),
             _ => Err(Self::Err {
-                message: "BAD option".to_string(),
+                message: Message::BadOption,
             }),
         }
     }
 }
 
 #[derive(StructOpt)]
+#[structopt(about = HELP)]
 struct Cli {
-    option: CliOptions,
+    read_mode: InputReadMode,
     source1: String,
     source2: String,
+}
+
+fn error_exit(message: constants::Message) -> ! {
+    eprintln!("{}", message);
+    process::exit(1);
 }
 
 fn main() {
     let args = Cli::from_args();
 
-    let (data1, data2) = match args.option {
-        CliOptions::D => (args.source1, args.source2),
-        CliOptions::F => {
-            (fs::read_to_string(args.source1)
-                .expect(&format!("Error occurred while reading source1")),
-            fs::read_to_string(args.source2)
-                .expect(&format!("Error occurred while reading source2")))
+    let (data1, data2) = match args.read_mode {
+        InputReadMode::D => (args.source1, args.source2),
+        InputReadMode::F => {
+            if let Ok(d1) = fs::read_to_string(args.source1) {
+                if let Ok(d2) = fs::read_to_string(args.source2) {
+                    (d1, d2)
+                } else {
+                    error_exit(Message::SOURCE2);
+                }
+            } else {
+                error_exit(Message::SOURCE1);
+            }
         }
     };
     display_output(compare_jsons(&data1, &data2));
-
 }
 
 fn display_output(result: Mismatch) {
@@ -66,42 +89,42 @@ fn display_output(result: Mismatch) {
         keys_in_both: KeyNode::Nil,
     };
     if no_mismatch == result {
-        println!("No mismatch was found.");
+        println!("{}", Message::NoMismatch);
     } else {
         match result.keys_in_both {
             KeyNode::Node(_) => {
                 let mut keys = Vec::new();
                 result.keys_in_both.absolute_keys(&mut keys, None);
-                println!("Mismatched:");
+                println!("{}:", Message::Mismatch);
                 for key in keys {
                     println!("{}", key);
                 }
             }
-            KeyNode::Value(_, _) => println!("Mismatch at root."),
+            KeyNode::Value(_, _) => println!("{}", Message::RootMismatch),
             KeyNode::Nil => (),
         }
         match result.left_only_keys {
             KeyNode::Node(_) => {
                 let mut keys = Vec::new();
                 result.left_only_keys.absolute_keys(&mut keys, None);
-                println!("Extra on left:");
+                println!("{}:", Message::LeftExtra);
                 for key in keys {
                     println!("{}", key.red().bold());
                 }
             }
-            KeyNode::Value(_, _) => (), // TODO left_only_keys should never be Value type => Throw an error
+            KeyNode::Value(_, _) => error_exit(Message::UnknownError),
             KeyNode::Nil => (),
         }
         match result.right_only_keys {
             KeyNode::Node(_) => {
                 let mut keys = Vec::new();
                 result.right_only_keys.absolute_keys(&mut keys, None);
-                println!("Extra on right:");
+                println!("{}:", Message::RightExtra);
                 for key in keys {
                     println!("{}", key.green().bold());
                 }
             }
-            KeyNode::Value(_, _) => (), // TODO right_only_keys should never be Value type => Throw an error
+            KeyNode::Value(_, _) => error_exit(Message::UnknownError),
             KeyNode::Nil => (),
         }
     }
@@ -162,10 +185,15 @@ impl Mismatch {
 }
 
 fn compare_jsons(a: &str, b: &str) -> Mismatch {
-    let value1: Value = serde_json::from_str(a).unwrap();
-    let value2: Value = serde_json::from_str(b).unwrap();
-
-    match_json(&value1, &value2)
+    if let Ok(value1) = serde_json::from_str(a) {
+        if let Ok(value2) = serde_json::from_str(b) {
+            match_json(&value1, &value2)
+        } else {
+            error_exit(Message::JSON2);
+        }
+    } else {
+        error_exit(Message::JSON1);
+    }
 }
 
 fn match_json(value1: &Value, value2: &Value) -> Mismatch {
