@@ -20,4 +20,12 @@ Option:
 f   :   read input from json files  
 d   :   read input from command line
 
+### Installation
+
+Currently, json-diff is available through crates.io (apart from building this repo directly). For crate installation,  
+* Install cargo, through rustup  
+`$ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`  
+* Install json-diff  
+`$ cargo install json_diff`
+
 
