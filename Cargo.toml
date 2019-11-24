@@ -3,6 +3,13 @@ name = "json_diff"
 version = "0.1.0"
 authors = ["ksceriath"]
 edition = "2018"
+license = "Unlicense"
+description = "A small diff tool utility for comparing jsons"
+readme = "README.md"
+homepage = "https://github.com/ksceriath/json-diff"
+repository = "https://github.com/ksceriath/json-diff"
+keywords = ["cli", "diff", "json"]
+categories = ["command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
