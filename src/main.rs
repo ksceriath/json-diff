@@ -4,13 +4,14 @@ mod process;
 
 use colored::*;
 use constants::Message;
-use ds::key_node::KeyNode;
-use ds::mismatch::Mismatch;
+use ds::{key_node::KeyNode, mismatch::Mismatch};
 use serde_json;
-use std::fmt;
-use std::fs;
-use std::process as proc;
-use std::str::FromStr;
+use std::{
+    fmt, fs,
+    io::{self, Write},
+    process as proc,
+    str::FromStr,
+};
 use structopt::StructOpt;
 
 const HELP: &str = r#"
@@ -88,28 +89,31 @@ fn display_output(result: Mismatch) {
         right_only_keys: KeyNode::Nil,
         keys_in_both: KeyNode::Nil,
     };
+
+    let stdout = io::stdout();
+    let mut handle = io::BufWriter::new(stdout.lock());
     if no_mismatch == result {
-        println!("{}", Message::NoMismatch);
+        writeln!(handle, "{}", Message::NoMismatch).unwrap();
     } else {
         match result.keys_in_both {
             KeyNode::Node(_) => {
                 let mut keys = Vec::new();
                 result.keys_in_both.absolute_keys(&mut keys, None);
-                println!("{}:", Message::Mismatch);
+                writeln!(handle, "{}:", Message::Mismatch).unwrap();
                 for key in keys {
-                    println!("{}", key);
+                    writeln!(handle, "{}", key).unwrap();
                 }
             }
-            KeyNode::Value(_, _) => println!("{}", Message::RootMismatch),
+            KeyNode::Value(_, _) => writeln!(handle, "{}", Message::RootMismatch).unwrap(),
             KeyNode::Nil => (),
         }
         match result.left_only_keys {
             KeyNode::Node(_) => {
                 let mut keys = Vec::new();
                 result.left_only_keys.absolute_keys(&mut keys, None);
-                println!("{}:", Message::LeftExtra);
+                writeln!(handle, "{}:", Message::LeftExtra).unwrap();
                 for key in keys {
-                    println!("{}", key.red().bold());
+                    writeln!(handle, "{}", key.red().bold()).unwrap();
                 }
             }
             KeyNode::Value(_, _) => error_exit(Message::UnknownError),
@@ -119,9 +123,9 @@ fn display_output(result: Mismatch) {
             KeyNode::Node(_) => {
                 let mut keys = Vec::new();
                 result.right_only_keys.absolute_keys(&mut keys, None);
-                println!("{}:", Message::RightExtra);
+                writeln!(handle, "{}:", Message::RightExtra).unwrap();
                 for key in keys {
-                    println!("{}", key.green().bold());
+                    writeln!(handle, "{}", key.green().bold()).unwrap();
                 }
             }
             KeyNode::Value(_, _) => error_exit(Message::UnknownError),
