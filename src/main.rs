@@ -4,20 +4,59 @@ use serde_json::Map;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::env;
+use std::fmt;
 use std::fs;
+use std::str::FromStr;
+use structopt::StructOpt;
+
+#[derive(Debug)]
+struct AppError {
+    message: String,
+}
+impl fmt::Display for AppError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+enum CliOptions {
+    D,
+    F,
+}
+impl FromStr for CliOptions {
+    type Err = AppError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "d" => Ok(CliOptions::D),
+            "f" => Ok(CliOptions::F),
+            _ => Err(Self::Err {
+                message: "BAD option".to_string(),
+            }),
+        }
+    }
+}
+
+#[derive(StructOpt)]
+struct Cli {
+    option: CliOptions,
+    source1: String,
+    source2: String,
+}
 
 fn main() {
-    let args = env::args().collect::<Vec<String>>();
-    let file1 = &args[1];
-    let file2 = &args[2];
+    let args = Cli::from_args();
 
-    let data1 =
-        &fs::read_to_string(file1).expect(&format!("Error occurred while reading {}", file1));
-    let data2 =
-        &fs::read_to_string(file2).expect(&format!("Error occurred while reading {}", file2));
+    let (data1, data2) = match args.option {
+        CliOptions::D => (args.source1, args.source2),
+        CliOptions::F => {
+            (fs::read_to_string(args.source1)
+                .expect(&format!("Error occurred while reading source1")),
+            fs::read_to_string(args.source2)
+                .expect(&format!("Error occurred while reading source2")))
+        }
+    };
+    display_output(compare_jsons(&data1, &data2));
 
-    display_output(compare_jsons(data1, data2));
 }
 
 fn display_output(result: Mismatch) {
@@ -87,9 +126,12 @@ impl KeyNode {
         let nil_key = |key: Option<String>| key.unwrap_or(String::new());
         match self {
             KeyNode::Nil => keys.push(nil_key(key_from_root)),
-            KeyNode::Value(a, b) => {
-                keys.push(format!("{} [ {} :: {} ]", val_key(key_from_root), a.to_string().blue().bold(), b.to_string().cyan().bold()))
-            }
+            KeyNode::Value(a, b) => keys.push(format!(
+                "{} [ {} :: {} ]",
+                val_key(key_from_root),
+                a.to_string().blue().bold(),
+                b.to_string().cyan().bold()
+            )),
             KeyNode::Node(map) => {
                 for (key, value) in map {
                     value.absolute_keys(
