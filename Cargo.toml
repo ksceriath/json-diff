@@ -11,6 +11,15 @@ repository = "https://github.com/ksceriath/json-diff"
 keywords = ["cli", "diff", "json"]
 categories = ["command-line-utilities"]
 
+[lib]
+name = "json_diff"
+path = "src/lib.rs"
+crate-type = ["lib"]
+
+[[bin]]
+name = "json_diff"
+path = "src/main.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

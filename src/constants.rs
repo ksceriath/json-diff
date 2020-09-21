@@ -1,5 +1,5 @@
-use std::fmt;
 use colored::*;
+use std::fmt;
 
 #[derive(Debug)]
 pub enum Message {
