@@ -16,11 +16,10 @@ pub fn compare_jsons(a: &str, b: &str) -> Result<Mismatch, Message> {
     Ok(process::match_json(&value1, &value2))
 }
 
-
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::ds::{key_node::KeyNode, mismatch::Mismatch};
+    use super::*;
     use maplit::hashmap;
     use serde_json::json;
 
@@ -155,7 +154,7 @@ mod tests {
             Ok(_) => panic!("This shouldn't be an Ok"),
             Err(err) => {
                 assert_eq!(Message::JSON1, err);
-            },
+            }
         };
     }
 
@@ -167,7 +166,7 @@ mod tests {
             Ok(_) => panic!("This shouldn't be an Ok"),
             Err(err) => {
                 assert_eq!(Message::JSON2, err);
-            },
+            }
         };
     }
 }
