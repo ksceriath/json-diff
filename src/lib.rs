@@ -1,11 +1,18 @@
 pub mod constants;
 pub mod ds;
 mod process;
-
+use constants::Message;
 use ds::mismatch::Mismatch;
-pub fn compare_jsons(a: &str, b: &str) -> Result<Mismatch, serde_json::Error> {
-    let value1 = serde_json::from_str(a)?;
-    let value2 = serde_json::from_str(b)?;
+
+pub fn compare_jsons(a: &str, b: &str) -> Result<Mismatch, Message> {
+    let value1 = match serde_json::from_str(a) {
+        Ok(val1) => val1,
+        Err(_) => return Err(Message::JSON1),
+    };
+    let value2 = match serde_json::from_str(b) {
+        Ok(val2) => val2,
+        Err(_) => return Err(Message::JSON2),
+    };
     Ok(process::match_json(&value1, &value2))
 }
 
@@ -138,5 +145,29 @@ mod tests {
             compare_jsons(data1, data2).unwrap(),
             Mismatch::new(KeyNode::Nil, KeyNode::Nil, KeyNode::Nil)
         );
+    }
+
+    #[test]
+    fn parse_err_source_one() {
+        let invalid_json1 = r#"{invalid: json}"#;
+        let valid_json2 = r#"{"a":"b"}"#;
+        match compare_jsons(invalid_json1, valid_json2) {
+            Ok(_) => panic!("This shouldn't be an Ok"),
+            Err(err) => {
+                assert_eq!(Message::JSON1, err);
+            },
+        };
+    }
+
+    #[test]
+    fn parse_err_source_two() {
+        let valid_json1 = r#"{"a":"b"}"#;
+        let invalid_json2 = r#"{invalid: json}"#;
+        match compare_jsons(valid_json1, invalid_json2) {
+            Ok(_) => panic!("This shouldn't be an Ok"),
+            Err(err) => {
+                assert_eq!(Message::JSON2, err);
+            },
+        };
     }
 }

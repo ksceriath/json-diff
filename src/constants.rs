@@ -1,7 +1,8 @@
 use colored::*;
 use std::fmt;
 
-#[derive(Debug)]
+// PartialEq is added for the sake of Test case that uses assert_eq
+#[derive(Debug, PartialEq)]
 pub enum Message {
     BadOption,
     SOURCE1,
