@@ -1,5 +1,15 @@
-use json_diff::{compare_jsons, constants::Message, display_output};
-use std::{fmt, fs, process as proc, str::FromStr};
+use colored::*;
+use json_diff::{
+    compare_jsons,
+    constants::Message,
+    ds::{key_node::KeyNode, mismatch::Mismatch},
+};
+use std::{
+    fmt, fs,
+    io::{self, Write},
+    process as proc,
+    str::FromStr,
+};
 use structopt::StructOpt;
 
 const HELP: &str = r#"
@@ -79,4 +89,55 @@ fn main() {
 fn error_exit(message: Message) -> ! {
     eprintln!("{}", message);
     proc::exit(1);
+}
+
+pub fn display_output(result: Mismatch) -> Result<(), std::io::Error> {
+    let no_mismatch = Mismatch {
+        left_only_keys: KeyNode::Nil,
+        right_only_keys: KeyNode::Nil,
+        keys_in_both: KeyNode::Nil,
+    };
+
+    let stdout = io::stdout();
+    let mut handle = io::BufWriter::new(stdout.lock());
+    Ok(if no_mismatch == result {
+        writeln!(handle, "\n{}", Message::NoMismatch)?;
+    } else {
+        match result.keys_in_both {
+            KeyNode::Node(_) => {
+                let mut keys = Vec::new();
+                result.keys_in_both.absolute_keys(&mut keys, None);
+                writeln!(handle, "\n{}:", Message::Mismatch)?;
+                for key in keys {
+                    writeln!(handle, "{}", key)?;
+                }
+            }
+            KeyNode::Value(_, _) => writeln!(handle, "{}", Message::RootMismatch)?,
+            KeyNode::Nil => (),
+        }
+        match result.left_only_keys {
+            KeyNode::Node(_) => {
+                let mut keys = Vec::new();
+                result.left_only_keys.absolute_keys(&mut keys, None);
+                writeln!(handle, "\n{}:", Message::LeftExtra)?;
+                for key in keys {
+                    writeln!(handle, "{}", key.red().bold())?;
+                }
+            }
+            KeyNode::Value(_, _) => (),
+            KeyNode::Nil => (),
+        }
+        match result.right_only_keys {
+            KeyNode::Node(_) => {
+                let mut keys = Vec::new();
+                result.right_only_keys.absolute_keys(&mut keys, None);
+                writeln!(handle, "\n{}:", Message::RightExtra)?;
+                for key in keys {
+                    writeln!(handle, "{}", key.green().bold())?;
+                }
+            }
+            KeyNode::Value(_, _) => (),
+            KeyNode::Nil => (),
+        }
+    })
 }
