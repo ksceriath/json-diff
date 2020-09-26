@@ -1,16 +1,18 @@
-use colored::*;
-use json_diff::{
-    compare_jsons,
-    constants::Message,
-    ds::{key_node::KeyNode, mismatch::Mismatch},
-};
 use std::{
     fmt, fs,
     io::{self, Write},
     process as proc,
     str::FromStr,
 };
+
+use colored::*;
 use structopt::StructOpt;
+
+use json_diff::{
+    constants::Message,
+    ds::{key_node::KeyNode, mismatch::Mismatch},
+    process::compare_jsons,
+};
 
 const HELP: &str = r#"
 Example:
