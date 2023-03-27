@@ -9,6 +9,18 @@ pub enum KeyNode {
     Node(HashMap<String, KeyNode>),
 }
 
+fn truncate(s: &str, max_chars: usize) -> String {
+    match s.char_indices().nth(max_chars) {
+        None => String::from(s),
+        Some((idx, _)) => {
+            let shorter = &s[..idx];
+            let snip = "//SNIP//";
+            let new_s = format!("{}{}", shorter, snip);
+            String::from(new_s)
+        }
+    }
+}
+
 impl KeyNode {
     pub fn absolute_keys(&self, keys: &mut Vec<String>, key_from_root: Option<String>) {
         let val_key = |key: Option<String>| {
@@ -24,8 +36,8 @@ impl KeyNode {
             KeyNode::Value(a, b) => keys.push(format!(
                 "{} [ {} :: {} ]",
                 val_key(key_from_root),
-                a.to_string().blue().bold(),
-                b.to_string().cyan().bold()
+                truncate(a.to_string().as_str(), 20).blue().bold(),
+                truncate(b.to_string().as_str(), 20).cyan().bold()
             )),
             KeyNode::Node(map) => {
                 for (key, value) in map {
@@ -38,3 +50,4 @@ impl KeyNode {
         }
     }
 }
+
