@@ -109,7 +109,7 @@ pub fn display_output(result: Mismatch) -> Result<(), std::io::Error> {
             KeyNode::Node(_) => {
                 let mut keys = Vec::new();
                 result.keys_in_both.absolute_keys(&mut keys, None);
-                writeln!(handle, "\n{}:", Message::Mismatch)?;
+                writeln!(handle, "\n{} ({}):", Message::Mismatch, keys.len())?;
                 for key in keys {
                     writeln!(handle, "{}", key)?;
                 }
@@ -121,7 +121,7 @@ pub fn display_output(result: Mismatch) -> Result<(), std::io::Error> {
             KeyNode::Node(_) => {
                 let mut keys = Vec::new();
                 result.left_only_keys.absolute_keys(&mut keys, None);
-                writeln!(handle, "\n{}:", Message::LeftExtra)?;
+                writeln!(handle, "\n{} ({}):", Message::LeftExtra, keys.len())?;
                 for key in keys {
                     writeln!(handle, "{}", key.red().bold())?;
                 }
@@ -133,7 +133,7 @@ pub fn display_output(result: Mismatch) -> Result<(), std::io::Error> {
             KeyNode::Node(_) => {
                 let mut keys = Vec::new();
                 result.right_only_keys.absolute_keys(&mut keys, None);
-                writeln!(handle, "\n{}:", Message::RightExtra)?;
+                writeln!(handle, "\n{} ({}):", Message::RightExtra, keys.len())?;
                 for key in keys {
                     writeln!(handle, "{}", key.green().bold())?;
                 }
