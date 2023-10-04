@@ -22,6 +22,12 @@ fn truncate(s: &str, max_chars: usize) -> String {
 }
 
 impl KeyNode {
+    pub fn absolute_keys_to_vec(&self, max_display_length: Option<usize>) -> Vec<String> {
+        let mut vec = Vec::new();
+        self.absolute_keys(&mut vec, None, max_display_length);
+        vec
+    }
+
     pub fn absolute_keys(
         &self,
         keys: &mut Vec<String>,
@@ -36,9 +42,8 @@ impl KeyNode {
             })
             .unwrap_or_default()
         };
-        let nil_key = |key: Option<String>| key.unwrap_or_default();
         match self {
-            KeyNode::Nil => keys.push(nil_key(key_from_root)),
+            KeyNode::Nil => keys.push(key_from_root.unwrap_or_default()),
             KeyNode::Value(a, b) => keys.push(format!(
                 "{} [ {} :: {} ]",
                 val_key(key_from_root),
