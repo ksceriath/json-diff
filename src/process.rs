@@ -23,11 +23,12 @@ pub fn compare_jsons(a: &str, b: &str) -> Result<Mismatch, Message> {
 pub fn match_json(value1: &Value, value2: &Value) -> Mismatch {
     match (value1, value2) {
         (Value::Object(a), Value::Object(b)) => {
-            let (left_only_keys, right_only_keys, intersection_keys) = intersect_maps(&a, &b);
+            let diff = intersect_maps(a, b);
+            let mut left_only_keys = get_map_of_keys(diff.left_only);
+            let mut right_only_keys = get_map_of_keys(diff.right_only);
+            let intersection_keys = diff.intersection;
 
             let mut unequal_keys = KeyNode::Nil;
-            let mut left_only_keys = get_map_of_keys(left_only_keys);
-            let mut right_only_keys = get_map_of_keys(right_only_keys);
 
             if let Some(intersection_keys) = intersection_keys {
                 for key in intersection_keys {
@@ -35,7 +36,7 @@ pub fn match_json(value1: &Value, value2: &Value) -> Mismatch {
                         left_only_keys: l,
                         right_only_keys: r,
                         keys_in_both: u,
-                    } = match_json(&a.get(&key).unwrap(), &b.get(&key).unwrap());
+                    } = match_json(a.get(&key).unwrap(), b.get(&key).unwrap());
                     left_only_keys = insert_child_key_map(left_only_keys, l, &key);
                     right_only_keys = insert_child_key_map(right_only_keys, r, &key);
                     unequal_keys = insert_child_key_map(unequal_keys, u, &key);
@@ -85,14 +86,27 @@ fn insert_child_key_map(parent: KeyNode, child: KeyNode, key: &String) -> KeyNod
     }
 }
 
-fn intersect_maps(
-    a: &Map<String, Value>,
-    b: &Map<String, Value>,
-) -> (
-    Option<HashSet<String>>,
-    Option<HashSet<String>>,
-    Option<HashSet<String>>,
-) {
+struct MapDifference {
+    left_only: Option<HashSet<String>>,
+    right_only: Option<HashSet<String>>,
+    intersection: Option<HashSet<String>>,
+}
+
+impl MapDifference {
+    pub fn new(
+        left_only: Option<HashSet<String>>,
+        right_only: Option<HashSet<String>>,
+        intersection: Option<HashSet<String>>,
+    ) -> Self {
+        Self {
+            right_only,
+            left_only,
+            intersection,
+        }
+    }
+}
+
+fn intersect_maps(a: &Map<String, Value>, b: &Map<String, Value>) -> MapDifference {
     let mut intersection = HashSet::new();
     let mut left = HashSet::new();
     let mut right = HashSet::new();
@@ -108,14 +122,14 @@ fn intersect_maps(
             right.insert(String::from(b_key));
         }
     }
-    let left = if left.len() == 0 { None } else { Some(left) };
-    let right = if right.len() == 0 { None } else { Some(right) };
-    let intersection = if intersection.len() == 0 {
+    let left = if left.is_empty() { None } else { Some(left) };
+    let right = if right.is_empty() { None } else { Some(right) };
+    let intersection = if intersection.is_empty() {
         None
     } else {
         Some(intersection)
     };
-    (left, right, intersection)
+    MapDifference::new(left, right, intersection)
 }
 
 #[cfg(test)]

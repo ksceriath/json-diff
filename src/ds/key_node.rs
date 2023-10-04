@@ -16,7 +16,7 @@ fn truncate(s: &str, max_chars: usize) -> String {
             let shorter = &s[..idx];
             let snip = "//SNIP//";
             let new_s = format!("{}{}", shorter, snip);
-            String::from(new_s)
+            new_s
         }
     }
 }
@@ -34,9 +34,9 @@ impl KeyNode {
                 s.push_str(" ->");
                 s
             })
-            .unwrap_or(String::new())
+            .unwrap_or_default()
         };
-        let nil_key = |key: Option<String>| key.unwrap_or(String::new());
+        let nil_key = |key: Option<String>| key.unwrap_or_default();
         match self {
             KeyNode::Nil => keys.push(nil_key(key_from_root)),
             KeyNode::Value(a, b) => keys.push(format!(
