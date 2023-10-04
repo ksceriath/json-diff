@@ -2,7 +2,7 @@ use colored::*;
 use serde_json::Value;
 use std::collections::HashMap;
 
-#[derive(Debug, PartialEq)] // TODO check: do we need PartiaEq ?
+#[derive(Debug, PartialEq)]
 pub enum KeyNode {
     Nil,
     Value(Value, Value),
@@ -22,7 +22,13 @@ fn truncate(s: &str, max_chars: usize) -> String {
 }
 
 impl KeyNode {
-    pub fn absolute_keys(&self, keys: &mut Vec<String>, key_from_root: Option<String>) {
+    pub fn absolute_keys(
+        &self,
+        keys: &mut Vec<String>,
+        key_from_root: Option<String>,
+        max_display_length: Option<usize>,
+    ) {
+        let max_display_length = max_display_length.unwrap_or(20);
         let val_key = |key: Option<String>| {
             key.map(|mut s| {
                 s.push_str(" ->");
@@ -36,18 +42,22 @@ impl KeyNode {
             KeyNode::Value(a, b) => keys.push(format!(
                 "{} [ {} :: {} ]",
                 val_key(key_from_root),
-                truncate(a.to_string().as_str(), 20).blue().bold(),
-                truncate(b.to_string().as_str(), 20).cyan().bold()
+                truncate(a.to_string().as_str(), max_display_length)
+                    .blue()
+                    .bold(),
+                truncate(b.to_string().as_str(), max_display_length)
+                    .cyan()
+                    .bold()
             )),
             KeyNode::Node(map) => {
                 for (key, value) in map {
                     value.absolute_keys(
                         keys,
                         Some(format!("{} {}", val_key(key_from_root.clone()), key)),
+                        Some(max_display_length),
                     )
                 }
             }
         }
     }
 }
-
