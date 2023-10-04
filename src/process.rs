@@ -1,22 +1,16 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+use crate::constants::Error;
 use serde_json::Map;
 use serde_json::Value;
 
-use crate::constants::Message;
 use crate::ds::key_node::KeyNode;
 use crate::ds::mismatch::Mismatch;
 
-pub fn compare_jsons(a: &str, b: &str) -> Result<Mismatch, Message> {
-    let value1 = match serde_json::from_str(a) {
-        Ok(val1) => val1,
-        Err(_) => return Err(Message::JSON1),
-    };
-    let value2 = match serde_json::from_str(b) {
-        Ok(val2) => val2,
-        Err(_) => return Err(Message::JSON2),
-    };
+pub fn compare_jsons(a: &str, b: &str) -> Result<Mismatch, Error> {
+    let value1 = serde_json::from_str(a)?;
+    let value2 = serde_json::from_str(b)?;
     Ok(match_json(&value1, &value2))
 }
 
@@ -268,7 +262,7 @@ mod tests {
         match compare_jsons(invalid_json1, valid_json2) {
             Ok(_) => panic!("This shouldn't be an Ok"),
             Err(err) => {
-                assert_eq!(Message::JSON1, err);
+                matches!(err, Error::JSON(_));
             }
         };
     }
@@ -280,7 +274,7 @@ mod tests {
         match compare_jsons(valid_json1, invalid_json2) {
             Ok(_) => panic!("This shouldn't be an Ok"),
             Err(err) => {
-                assert_eq!(Message::JSON2, err);
+                matches!(err, Error::JSON(_));
             }
         };
     }

@@ -1,38 +1,31 @@
-use colored::*;
-use std::fmt;
+use std::fmt::{Display, Formatter};
+use thiserror::Error;
+use vg_errortools::FatIOError;
 
-// PartialEq is added for the sake of Test case that uses assert_eq
-#[derive(Debug, PartialEq)]
-pub enum Message {
-    BadOption,
-    SOURCE1,
-    SOURCE2,
-    JSON1,
-    JSON2,
-    UnknownError,
-    NoMismatch,
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("Error opening file: {0}")]
+    IOError(#[from] FatIOError),
+    #[error("Error parsing first json: {0}")]
+    JSON(#[from] serde_json::Error),
+}
+
+#[derive(Debug)]
+pub enum DiffType {
     RootMismatch,
     LeftExtra,
     RightExtra,
     Mismatch,
 }
 
-impl fmt::Display for Message {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let message = match self {
-            Message::BadOption => "Invalid option.",
-            Message::SOURCE1 => "Could not read source1.",
-            Message::SOURCE2 => "Could not read source2.",
-            Message::JSON1 => "Could not parse source1.",
-            Message::JSON2 => "Could not parse source2.",
-            Message::UnknownError => "",
-            Message::NoMismatch => "No mismatch was found.",
-            Message::RootMismatch => "Mismatch at root.",
-            Message::LeftExtra => "Extra on left",
-            Message::RightExtra => "Extra on right",
-            Message::Mismatch => "Mismatched",
+impl Display for DiffType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let msg = match self {
+            DiffType::RootMismatch => "Mismatch at root.",
+            DiffType::LeftExtra => "Extra on left",
+            DiffType::RightExtra => "Extra on right",
+            DiffType::Mismatch => "Mismatched",
         };
-
-        write!(f, "{}", message.bold())
+        write!(f, "{}", msg)
     }
 }

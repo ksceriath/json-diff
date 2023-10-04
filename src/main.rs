@@ -1,146 +1,64 @@
-use std::{
-    fmt, fs,
-    io::{self, Write},
-    process as proc,
-    str::FromStr,
-};
+use clap::Parser;
+use clap::Subcommand;
 
-use colored::*;
-use structopt::StructOpt;
-
+use json_diff::constants::Error;
 use json_diff::{
-    constants::Message,
     ds::{key_node::KeyNode, mismatch::Mismatch},
     process::compare_jsons,
 };
 
-const HELP: &str = r#"
-Example:
-json_diff f source1.json source2.json
-json_diff d '{...}' '{...}'
-
-Option:
-f   :   read input from json files
-d   :   read input from command line"#;
-
-#[derive(Debug)]
-struct AppError {
-    message: Message,
+#[derive(Subcommand, Clone)]
+/// Input selection
+enum Mode {
+    /// File input
+    #[clap(short_flag = 'f')]
+    File { file_1: String, file_2: String },
+    /// Read from CLI
+    #[clap(short_flag = 'd')]
+    Direct { json_1: String, json_2: String },
 }
-impl fmt::Display for AppError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.message)
+
+#[derive(Parser)]
+struct Args {
+    #[command(subcommand)]
+    cmd: Mode,
+}
+
+fn main() -> Result<(), Error> {
+    let args = Args::parse();
+    let (json_1, json_2) = match args.cmd {
+        Mode::Direct { json_2, json_1 } => (json_1, json_2),
+        Mode::File { file_2, file_1 } => {
+            let d1 = vg_errortools::fat_io_wrap_std(file_1, &std::fs::read_to_string)?;
+            let d2 = vg_errortools::fat_io_wrap_std(file_2, &std::fs::read_to_string)?;
+            (d1, d2)
+        }
+    };
+
+    let mismatch = compare_jsons(&json_1, &json_2)?;
+
+    let comparison_result = check_diffs(mismatch)?;
+    if !comparison_result {
+        std::process::exit(1);
     }
+    Ok(())
 }
 
-enum InputReadMode {
-    D,
-    F,
-}
-impl FromStr for InputReadMode {
-    type Err = AppError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "d" => Ok(InputReadMode::D),
-            "f" => Ok(InputReadMode::F),
-            _ => Err(Self::Err {
-                message: Message::BadOption,
-            }),
-        }
-    }
-}
-
-#[derive(StructOpt)]
-#[structopt(about = HELP)]
-struct Cli {
-    read_mode: InputReadMode,
-    source1: String,
-    source2: String,
-}
-
-fn main() {
-    let args = Cli::from_args();
-
-    let (data1, data2) = match args.read_mode {
-        InputReadMode::D => (args.source1, args.source2),
-        InputReadMode::F => {
-            if let Ok(d1) = fs::read_to_string(args.source1) {
-                if let Ok(d2) = fs::read_to_string(args.source2) {
-                    (d1, d2)
-                } else {
-                    error_exit(Message::SOURCE2);
-                }
-            } else {
-                error_exit(Message::SOURCE1);
-            }
-        }
-    };
-    let mismatch = match compare_jsons(&data1, &data2) {
-        Ok(mismatch) => mismatch,
-        Err(err) => {
-            eprintln!("{}", err);
-            proc::exit(1)
-        }
-    };
-    match display_output(mismatch) {
-        Ok(_) => (),
-        Err(err) => eprintln!("{}", err),
-    };
-}
-
-fn error_exit(message: Message) -> ! {
-    eprintln!("{}", message);
-    proc::exit(1);
-}
-
-pub fn display_output(result: Mismatch) -> Result<(), std::io::Error> {
+pub fn check_diffs(result: Mismatch) -> Result<bool, Error> {
     let no_mismatch = Mismatch {
         left_only_keys: KeyNode::Nil,
         right_only_keys: KeyNode::Nil,
         keys_in_both: KeyNode::Nil,
     };
 
-    let stdout = io::stdout();
-    let mut handle = io::BufWriter::new(stdout.lock());
     if no_mismatch == result {
-        writeln!(handle, "\n{}", Message::NoMismatch)?;
+        println!("No mismatch");
+        Ok(true)
     } else {
-        match result.keys_in_both {
-            KeyNode::Node(_) => {
-                let mut keys = Vec::new();
-                result.keys_in_both.absolute_keys(&mut keys, None, None);
-                writeln!(handle, "\n{} ({}):", Message::Mismatch, keys.len())?;
-                for key in keys {
-                    writeln!(handle, "{}", key)?;
-                }
-            }
-            KeyNode::Value(_, _) => writeln!(handle, "{}", Message::RootMismatch)?,
-            KeyNode::Nil => (),
+        let mismatches = result.all_diffs();
+        for (d_type, key) in mismatches {
+            println!("{d_type}: {key}");
         }
-        match result.left_only_keys {
-            KeyNode::Node(_) => {
-                let mut keys = Vec::new();
-                result.left_only_keys.absolute_keys(&mut keys, None, None);
-                writeln!(handle, "\n{} ({}):", Message::LeftExtra, keys.len())?;
-                for key in keys {
-                    writeln!(handle, "{}", key.red().bold())?;
-                }
-            }
-            KeyNode::Value(_, _) => (),
-            KeyNode::Nil => (),
-        }
-        match result.right_only_keys {
-            KeyNode::Node(_) => {
-                let mut keys = Vec::new();
-                result.right_only_keys.absolute_keys(&mut keys, None, None);
-                writeln!(handle, "\n{} ({}):", Message::RightExtra, keys.len())?;
-                for key in keys {
-                    writeln!(handle, "{}", key.green().bold())?;
-                }
-            }
-            KeyNode::Value(_, _) => (),
-            KeyNode::Nil => (),
-        }
-    };
-    Ok(())
+        Ok(false)
+    }
 }

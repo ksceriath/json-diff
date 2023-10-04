@@ -1,3 +1,4 @@
+use crate::constants::DiffType;
 use crate::ds::key_node::KeyNode;
 
 #[derive(Debug, PartialEq)]
@@ -14,5 +15,25 @@ impl Mismatch {
             right_only_keys: r,
             keys_in_both: u,
         }
+    }
+
+    pub fn all_diffs(&self) -> Vec<(DiffType, String)> {
+        let both = self
+            .keys_in_both
+            .absolute_keys_to_vec(None)
+            .into_iter()
+            .map(|k| (DiffType::Mismatch, k));
+        let left = self
+            .left_only_keys
+            .absolute_keys_to_vec(None)
+            .into_iter()
+            .map(|k| (DiffType::LeftExtra, k));
+        let right = self
+            .right_only_keys
+            .absolute_keys_to_vec(None)
+            .into_iter()
+            .map(|k| (DiffType::RightExtra, k));
+
+        both.chain(left).chain(right).collect()
     }
 }
