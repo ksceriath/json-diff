@@ -1,4 +1,3 @@
-use colored::*;
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -47,12 +46,8 @@ impl KeyNode {
             KeyNode::Value(a, b) => keys.push(format!(
                 "{} [ {} :: {} ]",
                 val_key(key_from_root),
-                truncate(a.to_string().as_str(), max_display_length)
-                    .blue()
-                    .bold(),
+                truncate(a.to_string().as_str(), max_display_length),
                 truncate(b.to_string().as_str(), max_display_length)
-                    .cyan()
-                    .bold()
             )),
             KeyNode::Node(map) => {
                 for (key, value) in map {
