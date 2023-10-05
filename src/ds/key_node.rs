@@ -34,7 +34,7 @@ impl KeyNode {
         key_from_root: Option<String>,
         max_display_length: Option<usize>,
     ) {
-        let max_display_length = max_display_length.unwrap_or(20);
+        let max_display_length = max_display_length.unwrap_or(4000);
         let val_key = |key: Option<String>| {
             key.map(|mut s| {
                 s.push_str(" ->");

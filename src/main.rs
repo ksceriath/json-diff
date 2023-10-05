@@ -22,6 +22,10 @@ enum Mode {
 struct Args {
     #[command(subcommand)]
     cmd: Mode,
+
+    #[clap(short, long, default_value_t = 20)]
+    /// truncate keys with more chars then this parameter
+    truncation_length: usize,
 }
 
 fn main() -> Result<(), Error> {
