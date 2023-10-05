@@ -1,5 +1,5 @@
-use crate::constants::DiffType;
 use crate::ds::key_node::KeyNode;
+use crate::enums::{DiffType, ValueType};
 
 #[derive(Debug, PartialEq)]
 pub struct Mismatch {
@@ -17,7 +17,7 @@ impl Mismatch {
         }
     }
 
-    pub fn all_diffs(&self) -> Vec<(DiffType, String)> {
+    pub fn all_diffs(&self) -> Vec<(DiffType, ValueType)> {
         let both = self
             .keys_in_both
             .absolute_keys_to_vec(None)

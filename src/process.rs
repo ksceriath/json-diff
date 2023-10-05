@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use crate::constants::Error;
+use crate::enums::Error;
 use serde_json::Map;
 use serde_json::Value;
 

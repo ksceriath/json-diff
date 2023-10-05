@@ -1,3 +1,4 @@
+use crate::enums::ValueType;
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -21,7 +22,7 @@ fn truncate(s: &str, max_chars: usize) -> String {
 }
 
 impl KeyNode {
-    pub fn absolute_keys_to_vec(&self, max_display_length: Option<usize>) -> Vec<String> {
+    pub fn absolute_keys_to_vec(&self, max_display_length: Option<usize>) -> Vec<ValueType> {
         let mut vec = Vec::new();
         self.absolute_keys(&mut vec, None, max_display_length);
         vec
@@ -29,7 +30,7 @@ impl KeyNode {
 
     pub fn absolute_keys(
         &self,
-        keys: &mut Vec<String>,
+        keys: &mut Vec<ValueType>,
         key_from_root: Option<String>,
         max_display_length: Option<usize>,
     ) {
@@ -42,12 +43,11 @@ impl KeyNode {
             .unwrap_or_default()
         };
         match self {
-            KeyNode::Nil => keys.push(key_from_root.unwrap_or_default()),
-            KeyNode::Value(a, b) => keys.push(format!(
-                "{} [ {} :: {} ]",
+            KeyNode::Nil => keys.push(ValueType::new_key(key_from_root.unwrap_or_default())),
+            KeyNode::Value(a, b) => keys.push(ValueType::new_value(
                 val_key(key_from_root),
                 truncate(a.to_string().as_str(), max_display_length),
-                truncate(b.to_string().as_str(), max_display_length)
+                truncate(b.to_string().as_str(), max_display_length),
             )),
             KeyNode::Node(map) => {
                 for (key, value) in map {

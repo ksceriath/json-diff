@@ -1,7 +1,7 @@
 use clap::Parser;
 use clap::Subcommand;
 
-use json_diff::constants::Error;
+use json_diff::enums::Error;
 use json_diff::{
     ds::{key_node::KeyNode, mismatch::Mismatch},
     process::compare_jsons,
