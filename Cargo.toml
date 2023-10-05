@@ -1,8 +1,8 @@
 [package]
 name = "json_diff"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["ksceriath"]
-edition = "2018"
+edition = "2021"
 license = "Unlicense"
 description = "A small diff tool utility for comparing jsons"
 readme = "README.md"
