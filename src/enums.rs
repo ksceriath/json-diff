@@ -50,6 +50,13 @@ impl ValueType {
     pub fn new_key(key: String) -> Self {
         Self::Key(key)
     }
+
+    pub fn get_key(&self) -> &str {
+        match self {
+            ValueType::Value { key, .. } => key.as_str(),
+            ValueType::Key(key) => key.as_str(),
+        }
+    }
 }
 
 impl Display for ValueType {
