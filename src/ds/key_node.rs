@@ -43,7 +43,11 @@ impl KeyNode {
             .unwrap_or_default()
         };
         match self {
-            KeyNode::Nil => keys.push(ValueType::new_key(key_from_root.unwrap_or_default())),
+            KeyNode::Nil => {
+                if let Some(key) = key_from_root {
+                    keys.push(ValueType::new_key(key))
+                }
+            }
             KeyNode::Value(a, b) => keys.push(ValueType::new_value(
                 val_key(key_from_root),
                 truncate(a.to_string().as_str(), max_display_length),

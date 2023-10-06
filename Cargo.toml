@@ -1,6 +1,6 @@
 [package]
 name = "json_diff"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["ksceriath"]
 edition = "2021"
 license = "Unlicense"

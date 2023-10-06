@@ -49,11 +49,7 @@ fn main() -> Result<(), Error> {
 }
 
 pub fn check_diffs(result: Mismatch) -> Result<bool, Error> {
-    let no_mismatch = Mismatch {
-        left_only_keys: KeyNode::Nil,
-        right_only_keys: KeyNode::Nil,
-        keys_in_both: KeyNode::Nil,
-    };
+    let no_mismatch = Mismatch::empty();
 
     if no_mismatch == result {
         println!("No mismatch");

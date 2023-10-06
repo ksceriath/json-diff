@@ -17,6 +17,14 @@ impl Mismatch {
         }
     }
 
+    pub fn empty() -> Self {
+        Mismatch {
+            left_only_keys: KeyNode::Nil,
+            keys_in_both: KeyNode::Nil,
+            right_only_keys: KeyNode::Nil,
+        }
+    }
+
     pub fn all_diffs(&self) -> Vec<(DiffType, ValueType)> {
         self.all_diffs_trunc(None)
     }
@@ -39,5 +47,16 @@ impl Mismatch {
             .map(|k| (DiffType::RightExtra, k));
 
         both.chain(left).chain(right).collect()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn empty_diffs() {
+        let empty = Mismatch::empty();
+        let all_diffs = empty.all_diffs();
+        assert!(all_diffs.is_empty());
     }
 }
