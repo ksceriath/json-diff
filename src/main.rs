@@ -2,10 +2,7 @@ use clap::Parser;
 use clap::Subcommand;
 
 use json_diff::enums::Error;
-use json_diff::{
-    ds::{key_node::KeyNode, mismatch::Mismatch},
-    process::compare_jsons,
-};
+use json_diff::{ds::mismatch::Mismatch, process::compare_jsons};
 
 #[derive(Subcommand, Clone)]
 /// Input selection
@@ -49,16 +46,10 @@ fn main() -> Result<(), Error> {
 }
 
 pub fn check_diffs(result: Mismatch) -> Result<bool, Error> {
-    let no_mismatch = Mismatch::empty();
-
-    if no_mismatch == result {
-        println!("No mismatch");
-        Ok(true)
-    } else {
-        let mismatches = result.all_diffs();
-        for (d_type, key) in mismatches {
-            println!("{d_type}: {key}");
-        }
-        Ok(false)
+    let mismatches = result.all_diffs();
+    let is_good = mismatches.is_empty();
+    for (d_type, key) in mismatches {
+        println!("{d_type}: {key}");
     }
+    Ok(is_good)
 }
