@@ -6,6 +6,7 @@ use std::collections::HashMap;
 pub enum KeyNode {
     Nil,
     Value(Value, Value),
+    Array(Vec<(usize, KeyNode)>),
     Node(HashMap<String, KeyNode>),
 }
 
@@ -58,6 +59,15 @@ impl KeyNode {
                     value.absolute_keys(
                         keys,
                         Some(format!("{} {}", val_key(key_from_root.clone()), key)),
+                        Some(max_display_length),
+                    )
+                }
+            }
+            KeyNode::Array(vec) => {
+                for (idx, value) in vec {
+                    value.absolute_keys(
+                        keys,
+                        Some(format!("[l: {}] {}", idx, val_key(key_from_root.clone()))),
                         Some(max_display_length),
                     )
                 }

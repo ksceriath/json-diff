@@ -12,8 +12,8 @@ Only missing or unequal keys are printed in output to reduce the verbosity.
 
 Usage Example:
 
-`$ json_diff f source1.json source2.json`  
-`$ json_diff d '{...}' '{...}'`
+`$ json_diff file source1.json source2.json`  
+`$ json_diff direct '{...}' '{...}'`
 
 Option:
 

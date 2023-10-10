@@ -13,6 +13,17 @@ pub fn compare_jsons(a: &str, b: &str) -> Result<Mismatch, Error> {
     let value2 = serde_json::from_str(b)?;
     Ok(match_json(&value1, &value2))
 }
+fn values_to_node(vec: Vec<(usize, &Value)>) -> KeyNode {
+    if vec.is_empty() {
+        KeyNode::Nil
+    } else {
+        KeyNode::Node(
+            vec.into_iter()
+                .map(|(id, val)| (format!("[l: {id}] - {}", val.to_string()), KeyNode::Nil))
+                .collect(),
+        )
+    }
+}
 
 pub fn match_json(value1: &Value, value2: &Value) -> Mismatch {
     match (value1, value2) {
@@ -37,6 +48,52 @@ pub fn match_json(value1: &Value, value2: &Value) -> Mismatch {
                 }
             }
             Mismatch::new(left_only_keys, right_only_keys, unequal_keys)
+        }
+        // this clearly needs to be improved! myers algorithm or whatever?
+        (Value::Array(a), Value::Array(b)) => {
+            let mut mismatch = Vec::new();
+            let mut left_only_values = Vec::new();
+            let mut right_only_values = Vec::new();
+
+            let max_len = a.len().max(b.len());
+            for idx in 0..max_len {
+                let a = a.get(idx);
+                let b = b.get(idx);
+                match (a, b) {
+                    (Some(a), Some(b)) => {
+                        if a != b {
+                            let Mismatch {
+                                left_only_keys: l,
+                                right_only_keys: r,
+                                keys_in_both: u,
+                            } = match_json(a, b);
+                            for node in [l, r, u] {
+                                if !matches!(node, KeyNode::Nil) {
+                                    mismatch.push((idx, node));
+                                }
+                            }
+                        }
+                    }
+                    (Some(a), None) => {
+                        left_only_values.push((idx, a));
+                    }
+                    (None, Some(b)) => {
+                        right_only_values.push((idx, b));
+                    }
+                    (None, None) => {
+                        unreachable!();
+                    }
+                }
+            }
+
+            let left_only_nodes = values_to_node(left_only_values);
+            let right_only_nodes = values_to_node(right_only_values);
+            let mismatch = if mismatch.is_empty() {
+                KeyNode::Nil
+            } else {
+                KeyNode::Array(mismatch)
+            };
+            Mismatch::new(left_only_nodes, right_only_nodes, mismatch)
         }
         (a, b) => {
             if a == b {
@@ -131,6 +188,63 @@ mod tests {
     use super::*;
     use maplit::hashmap;
     use serde_json::json;
+
+    #[test]
+    fn test_arrays_simple_diff() {
+        let data1 = r#"["a","b","c"]"#;
+        let data2 = r#"["a","b","d"]"#;
+        let diff = compare_jsons(data1, data2).unwrap();
+        assert_eq!(diff.left_only_keys, KeyNode::Nil);
+        assert_eq!(diff.right_only_keys, KeyNode::Nil);
+        let diff = diff.keys_in_both.absolute_keys_to_vec(None);
+        assert_eq!(diff.len(), 1);
+        assert_eq!(
+            diff.first().unwrap().to_string(),
+            r#"[l: 2]  -> { "c" != "d" }"#
+        );
+    }
+
+    #[test]
+    fn test_arrays_extra_left() {
+        let data1 = r#"["a","b","c"]"#;
+        let data2 = r#"["a","b"]"#;
+        let diff = compare_jsons(data1, data2).unwrap();
+
+        let diffs = diff.left_only_keys.absolute_keys_to_vec(None);
+        assert_eq!(diffs.len(), 1);
+        assert_eq!(diffs.first().unwrap().to_string(), r#" [l: 2] - "c""#);
+        assert_eq!(diff.keys_in_both, KeyNode::Nil);
+        assert_eq!(diff.right_only_keys, KeyNode::Nil);
+    }
+
+    #[test]
+    fn test_arrays_extra_right() {
+        let data1 = r#"["a","b"]"#;
+        let data2 = r#"["a","b","c"]"#;
+        let diff = compare_jsons(data1, data2).unwrap();
+
+        let diffs = diff.right_only_keys.absolute_keys_to_vec(None);
+        assert_eq!(diffs.len(), 1);
+        assert_eq!(diffs.first().unwrap().to_string(), r#" [l: 2] - "c""#);
+        assert_eq!(diff.keys_in_both, KeyNode::Nil);
+        assert_eq!(diff.left_only_keys, KeyNode::Nil);
+    }
+
+    #[test]
+    fn test_arrays_object_extra() {
+        let data1 = r#"["a","b"]"#;
+        let data2 = r#"["a","b", {"c": {"d": "e"} }]"#;
+        let diff = compare_jsons(data1, data2).unwrap();
+
+        let diffs = diff.right_only_keys.absolute_keys_to_vec(None);
+        assert_eq!(diffs.len(), 1);
+        assert_eq!(
+            diffs.first().unwrap().to_string(),
+            r#" [l: 2] - {"c":{"d":"e"}}"#
+        );
+        assert_eq!(diff.keys_in_both, KeyNode::Nil);
+        assert_eq!(diff.left_only_keys, KeyNode::Nil);
+    }
 
     #[test]
     fn nested_diff() {
