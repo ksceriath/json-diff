@@ -1,3 +1,4 @@
+use diffs::{myers, Diff, Replace};
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -22,6 +23,40 @@ fn values_to_node(vec: Vec<(usize, &Value)>) -> KeyNode {
                 .map(|(id, val)| (format!("[l: {id}] - {}", val.to_string()), KeyNode::Nil))
                 .collect(),
         )
+    }
+}
+
+struct ListDiffHandler<'a> {
+    replaced: &'a mut Vec<(usize, usize, usize, usize)>,
+    deletion: &'a mut Vec<(usize, usize)>,
+    insertion: &'a mut Vec<(usize, usize)>,
+}
+impl<'a> ListDiffHandler<'a> {
+    pub fn new(
+        replaced: &'a mut Vec<(usize, usize, usize, usize)>,
+        deletion: &'a mut Vec<(usize, usize)>,
+        insertion: &'a mut Vec<(usize, usize)>,
+    ) -> Self {
+        Self {
+            replaced,
+            deletion,
+            insertion,
+        }
+    }
+}
+impl<'a> Diff for ListDiffHandler<'a> {
+    type Error = ();
+    fn delete(&mut self, old: usize, len: usize, _new: usize) -> Result<(), ()> {
+        self.deletion.push((old, len));
+        Ok(())
+    }
+    fn insert(&mut self, _o: usize, new: usize, len: usize) -> Result<(), ()> {
+        self.insertion.push((new, len));
+        Ok(())
+    }
+    fn replace(&mut self, old: usize, len: usize, new: usize, new_len: usize) -> Result<(), ()> {
+        self.replaced.push((old, len, new, new_len));
+        Ok(())
     }
 }
 
@@ -51,40 +86,33 @@ pub fn match_json(value1: &Value, value2: &Value) -> Mismatch {
         }
         // this clearly needs to be improved! myers algorithm or whatever?
         (Value::Array(a), Value::Array(b)) => {
-            let mut mismatch = Vec::new();
-            let mut left_only_values = Vec::new();
-            let mut right_only_values = Vec::new();
+            let mut replaced = Vec::new();
+            let mut deleted = Vec::new();
+            let mut inserted = Vec::new();
 
-            let max_len = a.len().max(b.len());
-            for idx in 0..max_len {
-                let a = a.get(idx);
-                let b = b.get(idx);
-                match (a, b) {
-                    (Some(a), Some(b)) => {
-                        if a != b {
-                            let Mismatch {
-                                left_only_keys: l,
-                                right_only_keys: r,
-                                keys_in_both: u,
-                            } = match_json(a, b);
-                            for node in [l, r, u] {
-                                if !matches!(node, KeyNode::Nil) {
-                                    mismatch.push((idx, node));
-                                }
-                            }
-                        }
-                    }
-                    (Some(a), None) => {
-                        left_only_values.push((idx, a));
-                    }
-                    (None, Some(b)) => {
-                        right_only_values.push((idx, b));
-                    }
-                    (None, None) => {
-                        unreachable!();
-                    }
-                }
-            }
+            let mut diff = Replace::new(ListDiffHandler::new(
+                &mut replaced,
+                &mut deleted,
+                &mut inserted,
+            ));
+            myers::diff(&mut diff, a, 0, a.len(), b, 0, b.len()).unwrap();
+
+            let mismatch: Vec<_> = replaced
+                .into_iter()
+                .flat_map(|(o, ol, n, _nl)| {
+                    (0..ol).map(move |i| (o + i, match_json(&a[o + i], &b[n + i]).keys_in_both))
+                })
+                .collect();
+
+            let left_only_values: Vec<_> = deleted
+                .into_iter()
+                .flat_map(|(o, ol)| (o..o + ol).map(|i| (i, &a[i])))
+                .collect();
+
+            let right_only_values: Vec<_> = inserted
+                .into_iter()
+                .flat_map(|(n, nl)| (n..n + nl).map(|i| (i, &b[i])))
+                .collect();
 
             let left_only_nodes = values_to_node(left_only_values);
             let right_only_nodes = values_to_node(right_only_values);
@@ -202,6 +230,25 @@ mod tests {
             diff.first().unwrap().to_string(),
             r#"[l: 2]  -> { "c" != "d" }"#
         );
+    }
+
+    #[test]
+    fn test_arrays_more_complex_diff() {
+        let data1 = r#"["a","b","c"]"#;
+        let data2 = r#"["a","a","b","d"]"#;
+        let diff = compare_jsons(data1, data2).unwrap();
+
+        let changes_diff = diff.keys_in_both.absolute_keys_to_vec(None);
+        assert_eq!(diff.left_only_keys, KeyNode::Nil);
+
+        assert_eq!(changes_diff.len(), 1);
+        assert_eq!(
+            changes_diff.first().unwrap().to_string(),
+            r#"[l: 2]  -> { "c" != "d" }"#
+        );
+        let insertions = diff.right_only_keys.absolute_keys_to_vec(None);
+        assert_eq!(insertions.len(), 1);
+        assert_eq!(insertions.first().unwrap().to_string(), r#" [l: 0] - "a""#);
     }
 
     #[test]

@@ -6,10 +6,6 @@ Input can be fed as inline strings or through files.
 For readability, output is neatly differentiated into three categories: keys with different values, and keys not present in either of the objects.  
 Only missing or unequal keys are printed in output to reduce the verbosity.
 
-## Screenshot of diff results
-
-[![A screenshot of a sample diff with json_diff](https://github.com/ksceriath/json-diff/blob/master/Screenshot.png)](https://github.com/ksceriath/json-diff/blob/master/Screenshot.png)
-
 Usage Example:
 
 `$ json_diff file source1.json source2.json`  
