@@ -13,8 +13,8 @@ Usage Example:
 
 Option:
 
-f   :   read input from json files  
-d   :   read input from command line
+file   :   read input from json files  
+direct   :   read input from command line
 
 ### Installation
 

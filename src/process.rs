@@ -99,8 +99,18 @@ pub fn match_json(value1: &Value, value2: &Value) -> Mismatch {
 
             let mismatch: Vec<_> = replaced
                 .into_iter()
-                .flat_map(|(o, ol, n, _nl)| {
-                    (0..ol).map(move |i| (o + i, match_json(&a[o + i], &b[n + i]).keys_in_both))
+                .flat_map(|(o, ol, n, nl)| {
+                    let max_length = ol.max(nl);
+                    (0..max_length).map(move |i| {
+                        (
+                            o + i,
+                            match_json(
+                                a.get(o + i).unwrap_or(&Value::Null),
+                                b.get(n + i).unwrap_or(&Value::Null),
+                            )
+                            .keys_in_both,
+                        )
+                    })
                 })
                 .collect();
 
@@ -274,6 +284,22 @@ mod tests {
         assert_eq!(diffs.len(), 1);
         assert_eq!(diffs.first().unwrap().to_string(), r#" [l: 2] - "c""#);
         assert_eq!(diff.keys_in_both, KeyNode::Nil);
+        assert_eq!(diff.left_only_keys, KeyNode::Nil);
+    }
+
+    #[test]
+    fn long_insertion_modification() {
+        let data1 = r#"["a","b","a"]"#;
+        let data2 = r#"["a","c","c","c","a"]"#;
+        let diff = compare_jsons(data1, data2).unwrap();
+        let diffs = diff.keys_in_both.absolute_keys_to_vec(None);
+        // 1. is b!=c, second is a!=c, third is missing in data1 but c in data2
+        assert_eq!(diffs.len(), 3);
+        assert_eq!(
+            diffs.last().unwrap().to_string(),
+            r#"[l: 3]  -> { null != "c" }"#
+        );
+        assert_eq!(diff.right_only_keys, KeyNode::Nil);
         assert_eq!(diff.left_only_keys, KeyNode::Nil);
     }
 
