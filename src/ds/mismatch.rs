@@ -25,6 +25,12 @@ impl Mismatch {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.left_only_keys == KeyNode::Nil
+            && self.keys_in_both == KeyNode::Nil
+            && self.right_only_keys == KeyNode::Nil
+    }
+
     pub fn all_diffs(&self) -> Vec<(DiffType, ValueType)> {
         self.all_diffs_trunc(None)
     }
