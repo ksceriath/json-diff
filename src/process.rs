@@ -1,4 +1,3 @@
-use closure::closure;
 use diffs::{myers, Diff, Replace};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -22,7 +21,7 @@ fn values_to_node(vec: Vec<(usize, &Value)>) -> KeyNode {
     } else {
         KeyNode::Node(
             vec.into_iter()
-                .map(|(id, val)| (format!("[l: {id}] - {}", val), KeyNode::Nil))
+                .map(|(id, val)| (format!("[l: {id}]-{}", val), KeyNode::Nil))
                 .collect(),
         )
     }
@@ -111,24 +110,6 @@ pub fn match_json(value1: &Value, value2: &Value, sort_arrays: bool) -> Mismatch
             )
             .unwrap();
 
-            let mismatch: Vec<_> = replaced
-                .into_iter()
-                .flat_map(|(o, ol, n, nl)| {
-                    let max_length = ol.max(nl);
-                    (0..max_length).map(closure!(move n, ref a, ref b, move o, |i| {
-                        let diff = match_json(
-                                    a.get(o + i).unwrap_or(&Value::Null),
-                                    b.get(n + i).unwrap_or(&Value::Null),
-                                    sort_arrays,
-                                )
-                                .keys_in_both;
-                        let position = o+i;
-                        (position, diff)}))
-                })
-                // filter out diffs that turn out not to be diffs after all from deep-sorting
-                .filter(|(_, d)| d != &KeyNode::Nil)
-                .collect();
-
             fn extract_one_sided_values(
                 v: Vec<(usize, usize)>,
                 vals: &[Value],
@@ -141,14 +122,32 @@ pub fn match_json(value1: &Value, value2: &Value, sort_arrays: bool) -> Mismatch
             let left_only_values: Vec<_> = extract_one_sided_values(deleted, a.as_slice());
             let right_only_values: Vec<_> = extract_one_sided_values(inserted, b.as_slice());
 
-            let left_only_nodes = values_to_node(left_only_values);
-            let right_only_nodes = values_to_node(right_only_values);
-            let mismatch = if mismatch.is_empty() {
-                KeyNode::Nil
-            } else {
-                KeyNode::Array(mismatch)
-            };
-            Mismatch::new(left_only_nodes, right_only_nodes, mismatch)
+            let mut left_only_nodes = values_to_node(left_only_values);
+            let mut right_only_nodes = values_to_node(right_only_values);
+            let mut diff = KeyNode::Nil;
+
+            for (o, ol, n, nl) in replaced {
+                let max_length = ol.max(nl);
+                for i in 0..max_length {
+                    let inner_a = a.get(o + i).unwrap_or(&Value::Null);
+                    let inner_b = b.get(n + i).unwrap_or(&Value::Null);
+
+                    let cdiff = match_json(inner_a, inner_b, sort_arrays);
+                    let position = o + i;
+                    let Mismatch {
+                        left_only_keys: l,
+                        right_only_keys: r,
+                        keys_in_both: u,
+                    } = cdiff;
+                    left_only_nodes =
+                        insert_child_key_map(left_only_nodes, l, &format!("[l: {position}]"));
+                    right_only_nodes =
+                        insert_child_key_map(right_only_nodes, r, &format!("[l: {position}]"));
+                    diff = insert_child_key_map(diff, u, &format!("[l: {position}]"));
+                }
+            }
+
+            Mismatch::new(left_only_nodes, right_only_nodes, diff)
         }
         (a, b) => {
             if a == b {
@@ -335,14 +334,44 @@ mod tests {
     }
 
     #[test]
-    fn test_arrays_deep_sorted_objects_with_diff() {
+    fn test_arrays_deep_sorted_objects_with_outer_diff() {
         let data1 = r#"[{"c": ["d","e"] },"b"]"#;
         let data2 = r#"["b","c",{"c": ["e", "d"] }]"#;
         let diff = compare_jsons(data1, data2, true).unwrap();
         assert!(!diff.is_empty());
         let insertions = diff.right_only_keys.absolute_keys_to_vec(None);
         assert_eq!(insertions.len(), 1);
-        assert_eq!(insertions.first().unwrap().to_string(), r#" [l: 2] - "c""#);
+        assert_eq!(insertions.first().unwrap().to_string(), r#"[l: 2]-"c""#);
+    }
+
+    #[test]
+    fn test_arrays_deep_sorted_objects_with_inner_diff() {
+        let data1 = r#"["a",{"c": ["d","e", "f"] },"b"]"#;
+        let data2 = r#"["b",{"c": ["e","d"] },"a"]"#;
+        let diff = compare_jsons(data1, data2, true).unwrap();
+        assert!(!diff.is_empty());
+        let deletions = diff.left_only_keys.absolute_keys_to_vec(None);
+
+        assert_eq!(deletions.len(), 1);
+        assert_eq!(
+            deletions.first().unwrap().to_string(),
+            r#"[l: 0]->c->[l: 2]-"f""#
+        );
+    }
+
+    #[test]
+    fn test_arrays_deep_sorted_objects_with_inner_diff_mutation() {
+        let data1 = r#"["a",{"c": ["d", "f"] },"b"]"#;
+        let data2 = r#"["b",{"c": ["e","d"] },"a"]"#;
+        let diff = compare_jsons(data1, data2, true).unwrap();
+        assert!(!diff.is_empty());
+        let diffs = diff.keys_in_both.absolute_keys_to_vec(None);
+
+        assert_eq!(diffs.len(), 1);
+        assert_eq!(
+            diffs.first().unwrap().to_string(),
+            r#"[l: 0]->c->[l: 1]->{"f"!="e"}"#
+        );
     }
 
     #[test]
@@ -354,10 +383,7 @@ mod tests {
         assert_eq!(diff.right_only_keys, KeyNode::Nil);
         let diff = diff.keys_in_both.absolute_keys_to_vec(None);
         assert_eq!(diff.len(), 1);
-        assert_eq!(
-            diff.first().unwrap().to_string(),
-            r#"[l: 2]  -> { "c" != "d" }"#
-        );
+        assert_eq!(diff.first().unwrap().to_string(), r#"[l: 2]->{"c"!="d"}"#);
     }
 
     #[test]
@@ -372,11 +398,11 @@ mod tests {
         assert_eq!(changes_diff.len(), 1);
         assert_eq!(
             changes_diff.first().unwrap().to_string(),
-            r#"[l: 2]  -> { "c" != "d" }"#
+            r#"[l: 2]->{"c"!="d"}"#
         );
         let insertions = diff.right_only_keys.absolute_keys_to_vec(None);
         assert_eq!(insertions.len(), 1);
-        assert_eq!(insertions.first().unwrap().to_string(), r#" [l: 0] - "a""#);
+        assert_eq!(insertions.first().unwrap().to_string(), r#"[l: 0]-"a""#);
     }
 
     #[test]
@@ -387,7 +413,7 @@ mod tests {
 
         let diffs = diff.left_only_keys.absolute_keys_to_vec(None);
         assert_eq!(diffs.len(), 1);
-        assert_eq!(diffs.first().unwrap().to_string(), r#" [l: 2] - "c""#);
+        assert_eq!(diffs.first().unwrap().to_string(), r#"[l: 2]-"c""#);
         assert_eq!(diff.keys_in_both, KeyNode::Nil);
         assert_eq!(diff.right_only_keys, KeyNode::Nil);
     }
@@ -400,7 +426,7 @@ mod tests {
 
         let diffs = diff.right_only_keys.absolute_keys_to_vec(None);
         assert_eq!(diffs.len(), 1);
-        assert_eq!(diffs.first().unwrap().to_string(), r#" [l: 2] - "c""#);
+        assert_eq!(diffs.first().unwrap().to_string(), r#"[l: 2]-"c""#);
         assert_eq!(diff.keys_in_both, KeyNode::Nil);
         assert_eq!(diff.left_only_keys, KeyNode::Nil);
     }
@@ -411,12 +437,12 @@ mod tests {
         let data2 = r#"["a","c","c","c","a"]"#;
         let diff = compare_jsons(data1, data2, false).unwrap();
         let diffs = diff.keys_in_both.absolute_keys_to_vec(None);
-        // 1. is b!=c, second is a!=c, third is missing in data1 but c in data2
+
         assert_eq!(diffs.len(), 3);
-        assert_eq!(
-            diffs.last().unwrap().to_string(),
-            r#"[l: 3]  -> { null != "c" }"#
-        );
+        let diffs: Vec<_> = diffs.into_iter().map(|d| d.to_string()).collect();
+        assert!(diffs.contains(&r#"[l: 3]->{null!="c"}"#.to_string()));
+        assert!(diffs.contains(&r#"[l: 1]->{"b"!="c"}"#.to_string()));
+        assert!(diffs.contains(&r#"[l: 2]->{"a"!="c"}"#.to_string()));
         assert_eq!(diff.right_only_keys, KeyNode::Nil);
         assert_eq!(diff.left_only_keys, KeyNode::Nil);
     }
@@ -431,7 +457,7 @@ mod tests {
         assert_eq!(diffs.len(), 1);
         assert_eq!(
             diffs.first().unwrap().to_string(),
-            r#" [l: 2] - {"c":{"d":"e"}}"#
+            r#"[l: 2]-{"c":{"d":"e"}}"#
         );
         assert_eq!(diff.keys_in_both, KeyNode::Nil);
         assert_eq!(diff.left_only_keys, KeyNode::Nil);

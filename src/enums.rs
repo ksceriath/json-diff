@@ -68,7 +68,7 @@ impl Display for ValueType {
                 key,
                 value_right,
             } => {
-                write!(f, "{key} {{ {value_left} != {value_right} }}")
+                write!(f, "{key}{{{value_left}!={value_right}}}")
             }
         }
     }

@@ -38,7 +38,7 @@ impl KeyNode {
         let max_display_length = max_display_length.unwrap_or(4000);
         let val_key = |key: Option<String>| {
             key.map(|mut s| {
-                s.push_str(" ->");
+                s.push_str("->");
                 s
             })
             .unwrap_or_default()
@@ -58,7 +58,7 @@ impl KeyNode {
                 for (key, value) in map {
                     value.absolute_keys(
                         keys,
-                        Some(format!("{} {}", val_key(key_from_root.clone()), key)),
+                        Some(format!("{}{}", val_key(key_from_root.clone()), key)),
                         Some(max_display_length),
                     )
                 }
@@ -67,7 +67,7 @@ impl KeyNode {
                 for (idx, value) in vec {
                     value.absolute_keys(
                         keys,
-                        Some(format!("[l: {}] {}", idx, val_key(key_from_root.clone()))),
+                        Some(format!("[l: {}]{}", idx, val_key(key_from_root.clone()))),
                         Some(max_display_length),
                     )
                 }
