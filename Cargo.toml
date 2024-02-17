@@ -1,6 +1,6 @@
 [package]
 name = "json_diff_ng"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["ksceriath", "ChrisRega"]
 edition = "2021"
 license = "Unlicense"
@@ -25,7 +25,7 @@ path = "src/main.rs"
 [dependencies]
 thiserror = "1.0"
 vg_errortools = "0.1"
-serde_json = "1.0"
+serde_json = { version = "1.0", features = ["preserve_order"] }
 maplit = "1.0"
 clap = {version = "4.4", features = ["derive"]}
 diffs = "0.5"

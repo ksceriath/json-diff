@@ -20,6 +20,10 @@ struct Args {
     #[command(subcommand)]
     cmd: Mode,
 
+    #[clap(short, long)]
+    /// deep-sort arrays before comparing
+    sort_arrays: bool,
+
     #[clap(short, long, default_value_t = 20)]
     /// truncate keys with more chars then this parameter
     truncation_length: usize,
@@ -36,7 +40,7 @@ fn main() -> Result<(), Error> {
         }
     };
 
-    let mismatch = compare_jsons(&json_1, &json_2)?;
+    let mismatch = compare_jsons(&json_1, &json_2, args.sort_arrays)?;
 
     let comparison_result = check_diffs(mismatch)?;
     if !comparison_result {
