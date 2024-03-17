@@ -85,7 +85,6 @@ pub fn match_json(value1: &Value, value2: &Value, sort_arrays: bool) -> Mismatch
             }
             Mismatch::new(left_only_keys, right_only_keys, unequal_keys)
         }
-        // this clearly needs to be improved! myers algorithm or whatever?
         (Value::Array(a), Value::Array(b)) => {
             let a = preprocess_array(sort_arrays, a);
             let b = preprocess_array(sort_arrays, b);

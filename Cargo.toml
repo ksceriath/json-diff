@@ -1,6 +1,6 @@
 [package]
 name = "json_diff_ng"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["ksceriath", "ChrisRega"]
 edition = "2021"
 license = "Unlicense"
