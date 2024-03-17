@@ -191,6 +191,8 @@ fn compare_values(a: &Value, b: &Value) -> std::cmp::Ordering {
         }
         (Value::String(a), Value::String(b)) => a.cmp(b),
         (Value::Array(a), Value::Array(b)) => {
+            let a = preprocess_array(true, a);
+            let b = preprocess_array(true, b);
             for (a, b) in a.iter().zip(b.iter()) {
                 let cmp = compare_values(a, b);
                 if cmp != std::cmp::Ordering::Equal {
@@ -329,6 +331,14 @@ mod tests {
     fn test_arrays_deep_sorted_objects() {
         let data1 = r#"[{"c": ["d","e"] },"b","c"]"#;
         let data2 = r#"["b","c",{"c": ["e", "d"] }]"#;
+        let diff = compare_jsons(data1, data2, true).unwrap();
+        assert!(diff.is_empty());
+    }
+
+    #[test]
+    fn test_arrays_deep_sorted_objects_with_arrays() {
+        let data1 = r#"[{"a": [{"b": ["3", "1"]}] }, {"a": [{"b": ["2", "3"]}] }]"#;
+        let data2 = r#"[{"a": [{"b": ["2", "3"]}] }, {"a": [{"b": ["1", "3"]}] }]"#;
         let diff = compare_jsons(data1, data2, true).unwrap();
         assert!(diff.is_empty());
     }
